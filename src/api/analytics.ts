@@ -92,7 +92,57 @@ export interface RepPerformanceDashboardResponse {
   }
 }
 
+export interface ManagerDashboardResponse {
+  success: boolean
+  data: {
+    kpis: {
+      totalLeads: number
+      newLeadsToday: number
+      newLeadsThisMonth: number
+      monthGrowth: number
+      qualifiedLeads: number
+      wonLeads: number
+      failedLeads: number
+      totalCalls: number
+      connectedCalls: number
+      callsToday: number
+      connectedToday: number
+      conversionRate: number
+      callConnectRate: number
+      todayConnectRate: number
+      overdueRemindersTotal: number
+      totalReps: number
+    }
+    funnel: Array<{ stage: string; count: number }>
+    callTrend: Array<{ date: string; label: string; total: number; connected: number }>
+    sourceBreakdown: Array<{ source: string; count: number; won: number }>
+    repLeaderboard: Array<{
+      id: string
+      name: string
+      phone: string
+      avatarUrl?: string | null
+      rank: number
+      callsToday: number
+      connectedCallsToday: number
+      leadsAssigned: number
+      leadsContacted: number
+      qualifiedThisWeek: number
+      wonLeads: number
+      overdueReminders: number
+      avgDuration: number
+      score: number
+    }>
+    recentLeads: any[]
+    manualAssignmentEnabled: boolean
+  }
+}
+
 export const analyticsAPI = {
+  getManagerDashboard: async (): Promise<ManagerDashboardResponse> => {
+    const response = await client.get('/analytics/manager-dashboard')
+    return response.data
+  },
+
   getKPIs: async (params?: { dateFrom?: string; dateTo?: string }): Promise<KPIResponse> => {
     const response = await client.get('/analytics/kpis', { params })
     return response.data

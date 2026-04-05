@@ -124,6 +124,7 @@ export default function LeadDetail() {
   const [featureControls, setFeatureControls] = useState(DEFAULT_FEATURE_CONTROLS)
   const [calls, setCalls] = useState<Call[]>([])
   const [callState, setCallState] = useState<CallState>('idle')
+  const [isStartingCall, setIsStartingCall] = useState(false)
   const [activeCall, setActiveCall] = useState<Call | null>(null)
   const [disposition, setDisposition] = useState<string>('')
   const [dispositionDraft, setDispositionDraft] = useState<string>('')
@@ -600,6 +601,10 @@ export default function LeadDetail() {
   }
 
   const startCall = async () => {
+    if (isStartingCall) {
+      return
+    }
+
     if (!featureControls.dialer) {
       alert('Dialer is disabled in Feature Controls.')
       return
@@ -621,6 +626,7 @@ export default function LeadDetail() {
     }
 
     try {
+      setIsStartingCall(true)
       await ensureMicrophoneReady()
       setCallState('dialing')
 
@@ -635,8 +641,10 @@ export default function LeadDetail() {
       }
     } catch (err: any) {
       console.error('Failed to initiate call:', err)
-      alert(err.message || 'Failed to initiate call')
+      alert(err?.response?.data?.message || err?.message || 'Failed to initiate call')
       setCallState('idle')
+    } finally {
+      setIsStartingCall(false)
     }
   }
 
@@ -1076,7 +1084,7 @@ export default function LeadDetail() {
                           }}
                           rows={2}
                           placeholder={dispositionDraft === disposition ? 'Add note if you plan to change the status...' : `Add a required note for ${dispositionDraft}...`}
-                          className={`w-full px-3 py-1.5 bg-[#F8FAFC] border rounded-lg text-xs text-[#0F172A] resize-none focus:outline-none focus:ring-2 focus:bg-white transition-all ${
+                          className={`w-full px-3 py-1.5 bg-[#F8FAFC] border rounded-lg text-xs text-[#0F172A] resize-none focus:outline-none focus:ring-2 transition-all ${
                             dispositionNoteError
                               ? 'border-[#FCA5A5] focus:ring-red-100 focus:border-[#DC2626]'
                               : 'border-[#E2E8F0] focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8]'
@@ -1267,8 +1275,6 @@ export default function LeadDetail() {
                 <div className="flex items-center justify-between mb-2 px-1">
                   <h3 className="text-[11px] font-bold text-[#0F172A]">Dialer</h3>
                   <button
-                    type="button"
-                    onMouseDown={(event) => event.preventDefault()}
                     onClick={savePhoneNumber}
                     disabled={!editablePhone.trim() || editablePhone.trim() === (lead.phone || '').trim()}
                     className="px-2.5 py-1 rounded-md bg-[#0F172A] text-white text-[9px] font-bold hover:bg-[#1E293B] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
@@ -1367,10 +1373,10 @@ export default function LeadDetail() {
                       ))}
                       <button
                         onClick={startCall}
-                        disabled={!canPlaceCall || callState === 'dialing'}
+                        disabled={!canPlaceCall || isStartingCall || callState === 'dialing'}
                         className="col-span-3 mt-1 h-9 rounded-lg bg-[#16A34A] text-white text-[11px] font-bold hover:bg-green-700 transition-all flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
                       >
-                        <PhoneCall size={14} /> {callState === 'dialing' ? 'Dialing...' : 'Start Call'}
+                        <PhoneCall size={14} /> {isStartingCall || callState === 'dialing' ? 'Dialing...' : 'Start Call'}
                       </button>
                       <button
                         type="button"
