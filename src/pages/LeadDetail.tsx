@@ -912,17 +912,19 @@ export default function LeadDetail() {
       <div className="flex gap-0">
         {/* Left — primary work area */}
         <div className="flex-1 p-3 space-y-3">
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => void handleDeleteLead()}
-              disabled={isDeletingLead}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] text-xs font-bold hover:bg-[#FEE2E2] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <Trash2 size={15} />
-              {isDeletingLead ? 'Deleting...' : 'Delete Lead'}
-            </button>
-          </div>
+          {user?.role === 'manager' ? (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => void handleDeleteLead()}
+                disabled={isDeletingLead}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] text-xs font-bold hover:bg-[#FEE2E2] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <Trash2 size={15} />
+                {isDeletingLead ? 'Deleting...' : 'Delete Lead'}
+              </button>
+            </div>
+          ) : null}
 
           {/* Top Attribute Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">

@@ -5,6 +5,7 @@ import { leadsAPI, type Lead } from '../api/leads'
 import type { LeadFieldConfig } from '../api/settings'
 import { teamAPI } from '../api/team'
 import FancyDropdown, { type FancyDropdownOption } from '../components/common/FancyDropdown'
+import BulkEditLeadsModal from '../components/leads/BulkEditLeadsModal'
 import ManualLeadModal from '../components/leads/ManualLeadModal'
 import ExportLeadsModal from '../components/leads/ExportLeadsModal'
 import RepresentativePicker, { type RepresentativePickerOption } from '../components/leads/RepresentativePicker'
@@ -32,29 +33,89 @@ const sourceColors: Record<string, string> = {
   'Google ADS': '#EA4335',
 }
 
+const LEAD_LIST_FILTERS_STORAGE_KEY = 'buildflow:lead-list-filters'
+
+type PersistedLeadFilters = {
+  city: string
+  disposition: string
+  owner: string
+  paginationMode: 'on' | 'off'
+  search: string
+  source: string
+}
+
+const readPersistedLeadFilters = (): PersistedLeadFilters => {
+  if (typeof window === 'undefined') {
+    return {
+      city: 'All',
+      disposition: 'All',
+      owner: 'All',
+      paginationMode: 'on',
+      search: '',
+      source: 'All',
+    }
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(LEAD_LIST_FILTERS_STORAGE_KEY)
+    if (!rawValue) {
+      return {
+        city: 'All',
+        disposition: 'All',
+        owner: 'All',
+        paginationMode: 'on',
+        search: '',
+        source: 'All',
+      }
+    }
+
+    const parsed = JSON.parse(rawValue) as Partial<PersistedLeadFilters>
+    return {
+      city: parsed.city || 'All',
+      disposition: parsed.disposition || 'All',
+      owner: parsed.owner || 'All',
+      paginationMode: parsed.paginationMode === 'off' ? 'off' : 'on',
+      search: parsed.search || '',
+      source: parsed.source || 'All',
+    }
+  } catch {
+    return {
+      city: 'All',
+      disposition: 'All',
+      owner: 'All',
+      paginationMode: 'on',
+      search: '',
+      source: 'All',
+    }
+  }
+}
+
 export default function LeadList() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { socket, connected } = useSocket()
   const isManager = user?.role === 'manager'
+  const [persistedFilters] = useState(readPersistedLeadFilters)
 
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [filterDisposition, setFilterDisposition] = useState<string>('All')
-  const [filterSource, setFilterSource] = useState<string>('All')
-  const [filterCity, setFilterCity] = useState<string>('All')
-  const [filterOwner, setFilterOwner] = useState<string>('All')
+  const [search, setSearch] = useState(persistedFilters.search)
+  const [filterDisposition, setFilterDisposition] = useState<string>(persistedFilters.disposition)
+  const [filterSource, setFilterSource] = useState<string>(persistedFilters.source)
+  const [filterCity, setFilterCity] = useState<string>(persistedFilters.city)
+  const [filterOwner, setFilterOwner] = useState<string>(persistedFilters.owner)
   const [showManualLead, setShowManualLead] = useState(false)
+  const [showBulkEditModal, setShowBulkEditModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
   const [representatives, setRepresentatives] = useState<RepresentativePickerOption[]>([])
   const [assigningLeadId, setAssigningLeadId] = useState<string | null>(null)
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([])
   const [deletingLeadId, setDeletingLeadId] = useState<string | null>(null)
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [bulkUpdating, setBulkUpdating] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [pagination, setPagination] = useState({ page: 1, total: 0, pages: 1 })
-  const [paginationMode, setPaginationMode] = useState<'on' | 'off'>('on')
+  const [paginationMode, setPaginationMode] = useState<'on' | 'off'>(persistedFilters.paginationMode)
   const [infiniteLeads, setInfiniteLeads] = useState<Lead[]>([])
   const [infinitePage, setInfinitePage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
@@ -87,6 +148,22 @@ export default function LeadList() {
       fetchTeam()
     }
   }, [isManager])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    window.localStorage.setItem(
+      LEAD_LIST_FILTERS_STORAGE_KEY,
+      JSON.stringify({
+        city: filterCity,
+        disposition: filterDisposition,
+        owner: filterOwner,
+        paginationMode,
+        search,
+        source: filterSource,
+      })
+    )
+  }, [filterCity, filterDisposition, filterOwner, filterSource, paginationMode, search])
 
   useEffect(() => {
     const handleLeadFieldsUpdated = () => {
@@ -137,7 +214,11 @@ export default function LeadList() {
     if (!socket || !connected) return
 
     const handleLeadRefresh = () => {
-      void fetchLeads(pagination.page, true)
+      if (paginationMode === 'on') {
+        void fetchLeads(pagination.page, true)
+      } else {
+        void initInfiniteScroll()
+      }
       void fetchFilters()
     }
 
@@ -150,7 +231,7 @@ export default function LeadList() {
       socket.off('lead:assigned', handleLeadRefresh)
       socket.off('lead:deleted', handleLeadRefresh)
     }
-  }, [socket, connected, pagination.page, search, filterDisposition, filterSource, filterCity, filterOwner, isManager])
+  }, [socket, connected, pagination.page, search, filterDisposition, filterSource, filterCity, filterOwner, isManager, paginationMode])
 
   // Handle scroll for infinite scroll
   const handleScroll = useCallback(() => {
@@ -318,7 +399,11 @@ export default function LeadList() {
       const response = await leadsAPI.assignLead(leadId, userId)
       if (!response.success) return
 
-      await fetchLeads(pagination.page)
+      if (paginationMode === 'on') {
+        await fetchLeads(pagination.page)
+      } else {
+        await initInfiniteScroll()
+      }
     } catch (error) {
       console.error('Failed to assign lead:', error)
     } finally {
@@ -326,7 +411,8 @@ export default function LeadList() {
     }
   }
 
-  const allVisibleSelected = leads.length > 0 && leads.every((lead) => selectedLeadIds.includes(lead._id))
+  const visibleLeads = paginationMode === 'on' ? leads : infiniteLeads
+  const allVisibleSelected = visibleLeads.length > 0 && visibleLeads.every((lead) => selectedLeadIds.includes(lead._id))
 
   const toggleLeadSelection = (leadId: string) => {
     setSelectedLeadIds((current) =>
@@ -337,14 +423,15 @@ export default function LeadList() {
   const toggleSelectAllVisible = () => {
     setSelectedLeadIds((current) => {
       if (allVisibleSelected) {
-        return current.filter((id) => !leads.some((lead) => lead._id === id))
+        return current.filter((id) => !visibleLeads.some((lead) => lead._id === id))
       }
 
-      return [...new Set([...current, ...leads.map((lead) => lead._id)])]
+      return [...new Set([...current, ...visibleLeads.map((lead) => lead._id)])]
     })
   }
 
   const hasFilters =
+    Boolean(search.trim()) ||
     filterDisposition !== 'All' ||
     filterSource !== 'All' ||
     filterCity !== 'All' ||
@@ -362,7 +449,7 @@ export default function LeadList() {
     try {
       setRefreshing(true)
       await Promise.all([
-        fetchLeads(pagination.page, true),
+        paginationMode === 'on' ? fetchLeads(pagination.page, true) : initInfiniteScroll(),
         fetchFilters(),
         isManager ? fetchTeam() : Promise.resolve(),
       ])
@@ -382,7 +469,11 @@ export default function LeadList() {
 
       setSelectedLeadIds((current) => current.filter((id) => id !== lead._id))
       const nextPage = leads.length === 1 && pagination.page > 1 ? pagination.page - 1 : pagination.page
-      await fetchLeads(nextPage)
+      if (paginationMode === 'on') {
+        await fetchLeads(nextPage)
+      } else {
+        await initInfiniteScroll()
+      }
       await fetchFilters()
     } catch (error) {
       console.error('Failed to delete lead:', error)
@@ -406,12 +497,41 @@ export default function LeadList() {
 
       setSelectedLeadIds([])
       const nextPage = selectedLeadIds.length === leads.length && pagination.page > 1 ? pagination.page - 1 : pagination.page
-      await fetchLeads(nextPage)
+      if (paginationMode === 'on') {
+        await fetchLeads(nextPage)
+      } else {
+        await initInfiniteScroll()
+      }
       await fetchFilters()
     } catch (error) {
       console.error('Failed to bulk delete leads:', error)
     } finally {
       setBulkDeleting(false)
+    }
+  }
+
+  const handleBulkUpdate = async (payload: { disposition?: string; owner?: string | null; source?: string; statusNote?: string }) => {
+    try {
+      setBulkUpdating(true)
+      const response = await leadsAPI.bulkUpdateLeads({
+        ids: selectedLeadIds,
+        ...payload,
+      })
+      if (!response.success) return
+
+      setShowBulkEditModal(false)
+      setSelectedLeadIds([])
+      if (paginationMode === 'on') {
+        await fetchLeads(pagination.page)
+      } else {
+        await initInfiniteScroll()
+      }
+      await fetchFilters()
+    } catch (error) {
+      console.error('Failed to bulk update leads:', error)
+      throw error
+    } finally {
+      setBulkUpdating(false)
     }
   }
 
@@ -549,22 +669,36 @@ export default function LeadList() {
             )}
 
             {selectedLeadIds.length ? (
+              <>
+                <button
+                  onClick={() => setShowBulkEditModal(true)}
+                  disabled={bulkUpdating}
+                  className="inline-flex items-center gap-1.5 h-8 px-3 border border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8] text-xs font-bold rounded-lg hover:bg-[#DBEAFE] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <Plus size={12} />
+                  {bulkUpdating ? 'Updating...' : `Bulk Edit (${selectedLeadIds.length})`}
+                </button>
+                {isManager ? (
+                  <button
+                    onClick={handleBulkDelete}
+                    disabled={bulkDeleting}
+                    className="inline-flex items-center gap-1.5 h-8 px-3 border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] text-xs font-bold rounded-lg hover:bg-[#FEE2E2] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <Trash2 size={12} />
+                    {bulkDeleting ? 'Deleting...' : `Delete (${selectedLeadIds.length})`}
+                  </button>
+                ) : null}
+              </>
+            ) : null}
+            {isManager ? (
               <button
-                onClick={handleBulkDelete}
-                disabled={bulkDeleting}
-                className="inline-flex items-center gap-1.5 h-8 px-3 border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] text-xs font-bold rounded-lg hover:bg-[#FEE2E2] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                onClick={() => setShowExportModal(true)}
+                className="inline-flex items-center gap-1.5 h-8 px-3 border border-[#D1FAE5] bg-[#F0FDF4] text-[#15803D] text-xs font-bold rounded-lg hover:bg-[#DCFCE7] transition-colors"
               >
-                <Trash2 size={12} />
-                {bulkDeleting ? 'Deleting...' : `Delete (${selectedLeadIds.length})`}
+                <Download size={12} />
+                Export
               </button>
             ) : null}
-            <button
-              onClick={() => setShowExportModal(true)}
-              className="inline-flex items-center gap-1.5 h-8 px-3 border border-[#D1FAE5] bg-[#F0FDF4] text-[#15803D] text-xs font-bold rounded-lg hover:bg-[#DCFCE7] transition-colors"
-            >
-              <Download size={12} />
-              Export
-            </button>
             <button
               onClick={() => navigate('/lead-import')}
               className="inline-flex items-center gap-1.5 h-8 px-3 border border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8] text-xs font-bold rounded-lg hover:bg-[#DBEAFE] transition-colors"
@@ -773,15 +907,17 @@ export default function LeadList() {
                         </span>
                       </td>
                       <td className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
-                        <button
-                          type="button"
-                          onClick={() => void handleDeleteLead(lead)}
-                          disabled={deletingLeadId === lead._id}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] text-[10px] font-bold hover:bg-[#FEE2E2] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                          <Trash2 size={11} />
-                          {deletingLeadId === lead._id ? '…' : 'Delete'}
-                        </button>
+                        {isManager ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteLead(lead)}
+                            disabled={deletingLeadId === lead._id}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] text-[10px] font-bold hover:bg-[#FEE2E2] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <Trash2 size={11} />
+                            {deletingLeadId === lead._id ? '…' : 'Delete'}
+                          </button>
+                        ) : null}
                       </td>
                       <td className="px-3 py-2.5 text-right">
                         <ChevronRight size={12} className="text-[#CBD5E1] inline" />
@@ -820,7 +956,11 @@ export default function LeadList() {
             try {
               const res = await leadsAPI.createLead(leadData)
               if (res.success) {
-                fetchLeads(1)
+                if (paginationMode === 'on') {
+                  fetchLeads(1)
+                } else {
+                  initInfiniteScroll()
+                }
                 setShowManualLead(false)
               }
             } catch (err) {
@@ -829,14 +969,31 @@ export default function LeadList() {
           }}
           onClose={() => setShowManualLead(false)}
           cities={cities.filter((city) => city !== 'All')}
+          sources={sources.filter((source) => source !== 'All')}
           defaultCity={cities.filter((city) => city !== 'All')[0] || 'Mumbai'}
           leadFields={leadFields}
           ownerMode={isManager ? 'unassigned' : 'self'}
         />
       ) : null}
 
-      {showExportModal ? (
-        <ExportLeadsModal onClose={() => setShowExportModal(false)} />
+      {showBulkEditModal ? (
+        <BulkEditLeadsModal
+          dispositions={dispositions.filter((disposition) => disposition !== 'All')}
+          isManager={isManager}
+          onClose={() => setShowBulkEditModal(false)}
+          onSubmit={handleBulkUpdate}
+          representatives={representatives}
+          selectedCount={selectedLeadIds.length}
+          sources={sources.filter((source) => source !== 'All')}
+        />
+      ) : null}
+
+      {showExportModal && isManager ? (
+        <ExportLeadsModal
+          initialOwner={filterOwner}
+          onClose={() => setShowExportModal(false)}
+          owners={owners}
+        />
       ) : null}
     </div>
   )

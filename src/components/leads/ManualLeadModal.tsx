@@ -8,6 +8,7 @@ interface ManualLeadModalProps {
   onSubmit: (lead: Partial<Lead>) => void
   onClose: () => void
   cities: string[]
+  sources: string[]
   defaultCity: string
   leadFields?: LeadFieldConfig[]
   initialValues?: Partial<Pick<Lead, 'name' | 'phone' | 'city'>>
@@ -22,6 +23,7 @@ export default function ManualLeadModal({
   onSubmit,
   onClose,
   cities,
+  sources,
   defaultCity,
   leadFields,
   initialValues,
@@ -45,6 +47,7 @@ export default function ManualLeadModal({
     email: '',
     phone: initialValues?.phone || '',
     city: initialValues?.city || defaultCity,
+    source: sources.find((source) => source === 'Manual') || sources[0] || 'Manual',
     campaign: '',
     budget: '',
     plotOwned: false,
@@ -66,7 +69,7 @@ export default function ManualLeadModal({
       email: form.email || null,
       phone: form.phone,
       city: form.city,
-      source: 'Manual',
+      source: form.source,
       budget: form.budget || null,
       plotOwned: form.plotOwned,
       plotSize: form.plotSize ? parseFloat(form.plotSize) : null,
@@ -247,13 +250,28 @@ export default function ManualLeadModal({
         <form onSubmit={handleSubmit} className="p-4 space-y-3">
           <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-blue-50 border border-blue-200">
             <div className="mt-0.5 h-2 w-2 rounded-full bg-blue-600 shrink-0" />
-            <div>
-              <p className="text-xs font-bold text-blue-600 leading-none">Source: Manual</p>
-              <p className="text-[10px] text-[#475569] mt-0.5">
-                {ownerMode === 'self'
-                  ? 'Lead will be automatically assigned to you.'
-                  : 'Lead will remain unassigned until manager assigns it.'}
-              </p>
+            <div className="flex-1">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="text-xs font-bold text-blue-600 leading-none">Lead Source</p>
+                  <p className="text-[10px] text-[#475569] mt-0.5">
+                    {ownerMode === 'self'
+                      ? 'Lead will be automatically assigned to you.'
+                      : 'Lead will remain unassigned until manager assigns it.'}
+                  </p>
+                </div>
+                <select
+                  value={form.source}
+                  onChange={(event) => updateForm('source', event.target.value)}
+                  className="min-w-[180px] px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm font-semibold text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/20 focus:border-[#1D4ED8]"
+                >
+                  {sources.map((source) => (
+                    <option key={source} value={source}>
+                      {source}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 

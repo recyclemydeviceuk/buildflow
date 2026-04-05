@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { X, Download, Calendar, CheckSquare, Square, Loader2, FileSpreadsheet } from 'lucide-react'
+import { X, Download, Calendar, CheckSquare, Loader2, FileSpreadsheet } from 'lucide-react'
 import { leadsAPI } from '../../api/leads'
 
 interface ExportLeadsModalProps {
+  initialOwner?: string
   onClose: () => void
+  owners: { id: string; name: string }[]
 }
 
 const DATE_RANGES = [
@@ -38,8 +40,9 @@ const EXPORTABLE_FIELDS = [
   { key: 'updatedAt', label: 'Updated At', default: false },
 ]
 
-export default function ExportLeadsModal({ onClose }: ExportLeadsModalProps) {
+export default function ExportLeadsModal({ initialOwner = 'All', onClose, owners }: ExportLeadsModalProps) {
   const [dateRange, setDateRange] = useState('today')
+  const [owner, setOwner] = useState(initialOwner)
   const [selectedFields, setSelectedFields] = useState<string[]>(
     EXPORTABLE_FIELDS.filter(f => f.default).map(f => f.key)
   )
@@ -74,6 +77,7 @@ export default function ExportLeadsModal({ onClose }: ExportLeadsModalProps) {
         dateRange,
         fields: selectedFields,
         format: 'csv',
+        owner: owner !== 'All' ? owner : undefined,
       })
 
       // Create download link
@@ -141,6 +145,27 @@ export default function ExportLeadsModal({ onClose }: ExportLeadsModalProps) {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <FileSpreadsheet size={16} className="text-[#1D4ED8]" />
+              <h3 className="text-sm font-semibold text-[#0F172A]">Representative Filter</h3>
+            </div>
+            <select
+              value={owner}
+              onChange={(event) => setOwner(event.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] bg-white text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/20 focus:border-[#1D4ED8]"
+            >
+              {owners.map((ownerOption) => (
+                <option key={ownerOption.id} value={ownerOption.id}>
+                  {ownerOption.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-[#64748B] mt-1.5">
+              Export all leads or only the leads assigned to a specific representative.
+            </p>
           </div>
 
           {/* Fields Selection */}

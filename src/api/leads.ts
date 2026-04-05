@@ -109,6 +109,25 @@ export interface BulkDeleteLeadsResponse {
   }
 }
 
+export interface BulkUpdateLeadsPayload {
+  ids: string[]
+  source?: string
+  disposition?: string
+  owner?: string | null
+  statusNote?: string
+}
+
+export interface BulkUpdateLeadsResponse {
+  success: boolean
+  message: string
+  data: {
+    updatedIds: string[]
+    updatedCount: number
+    skippedIds: string[]
+    skippedCount: number
+  }
+}
+
 export const leadsAPI = {
   getLeads: async (params?: Record<string, string>): Promise<LeadsResponse> => {
     const response = await client.get('/leads', { params })
@@ -150,6 +169,11 @@ export const leadsAPI = {
     return response.data
   },
 
+  bulkUpdateLeads: async (data: BulkUpdateLeadsPayload): Promise<BulkUpdateLeadsResponse> => {
+    const response = await client.post('/leads/bulk-update', data)
+    return response.data
+  },
+
   assignLead: async (id: string, userId: string | null): Promise<LeadResponse> => {
     const response = await client.patch(`/leads/${id}/assign`, { userId })
     return response.data
@@ -175,7 +199,7 @@ export const leadsAPI = {
     return response.data
   },
 
-  exportLeads: async (data: { dateRange: string; fields?: string[]; format?: string }): Promise<Blob> => {
+  exportLeads: async (data: { dateRange: string; fields?: string[]; format?: string; owner?: string }): Promise<Blob> => {
     const response = await client.post('/leads/export', data, { responseType: 'blob' })
     return response.data
   },
