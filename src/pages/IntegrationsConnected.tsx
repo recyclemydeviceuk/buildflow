@@ -17,6 +17,7 @@ export default function IntegrationsConnected() {
   const navigate = useNavigate()
   const [integrations, setIntegrations] = useState<Integration[]>([])
   const [loading, setLoading] = useState(true)
+  const [syncingMeta, setSyncingMeta] = useState(false)
 
   const refresh = async () => {
     setLoading(true)
@@ -156,6 +157,31 @@ export default function IntegrationsConnected() {
                           className="inline-flex items-center gap-1.5 h-7 px-3 rounded-lg text-xs font-bold bg-[#FEF2F2] border border-[#FECACA] text-[#DC2626] hover:bg-red-100 transition-colors"
                         >
                           Disconnect
+                        </button>
+                      )}
+                      {connected && conn.provider === 'meta' && (
+                        <button
+                          disabled={syncingMeta}
+                          onClick={async () => {
+                            setSyncingMeta(true)
+                            try {
+                              await integrationsAPI.subscribeMetaPages()
+                              const importRes = await integrationsAPI.fetchMetaLeads()
+                              await refresh()
+                              alert(
+                                `Meta sync complete. Imported ${importRes.data.importedCount} leads (${importRes.data.createdCount} new, ${importRes.data.skippedCount} skipped) across ${importRes.data.forms.length} forms.`
+                              )
+                            } catch (err) {
+                              console.error('Meta sync failed:', err)
+                              alert('Failed to sync Meta pages or import Meta leads. Please try re-connecting.')
+                            } finally {
+                              setSyncingMeta(false)
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 h-7 px-3 rounded-lg text-xs font-bold bg-[#F0FDF4] border border-[#BBF7D0] text-[#16A34A] hover:bg-[#DCFCE7] transition-colors disabled:opacity-50"
+                        >
+                          {syncingMeta ? <Loader2 size={11} className="animate-spin" /> : <Zap size={11} />}
+                          Sync Pages
                         </button>
                       )}
                       {!connected && !meta.connectable && (
