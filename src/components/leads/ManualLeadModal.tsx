@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { X, Plus, MapPin, DollarSign, User, Mail, Phone, Building } from 'lucide-react'
+import { X, Plus, MapPin, DollarSign, User, Mail, Phone, Building, ChevronDown, CheckCircle2, Building2 } from 'lucide-react'
 import type { Lead } from '../../api/leads'
 import type { LeadFieldConfig } from '../../api/settings'
 import { normalizeLeadFieldConfigs } from '../../utils/leadFields'
@@ -15,9 +15,13 @@ interface ManualLeadModalProps {
   ownerMode?: 'unassigned' | 'self'
 }
 
-const fieldLabelClass = 'block text-[11px] font-semibold text-[#334155] mb-1'
+const fieldLabelClass = 'text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1 group-focus-within:text-[#1D4ED8] transition-colors'
 const inputClass =
-  'w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] placeholder-[#CBD5E1] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/20 focus:border-[#1D4ED8]'
+  'w-full px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] font-medium focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all'
+const selectClass =
+  'w-full appearance-none px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs font-medium text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all cursor-pointer'
+const selectWithIconClass =
+  'w-full pl-8 pr-7 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] font-medium focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all appearance-none cursor-pointer'
 
 export default function ManualLeadModal({
   onSubmit,
@@ -90,14 +94,17 @@ export default function ManualLeadModal({
 
     if (field.key === 'city') {
       return (
-        <div key={field.key}>
-          {commonLabel}
+        <div key={field.key} className="group">
+          <label className={fieldLabelClass}>
+            {field.label}
+            {field.required ? <span className="text-[#DC2626]"> *</span> : null}
+          </label>
           <div className="relative">
-            <MapPin size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
+            <MapPin size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94A3B8] group-hover:text-[#1D4ED8] transition-colors pointer-events-none" />
             <select
               value={form.city}
               onChange={(event) => updateForm('city', event.target.value)}
-              className="w-full px-3 py-2 pl-8 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/20 focus:border-[#1D4ED8] appearance-none"
+              className={selectWithIconClass}
               required={field.required}
             >
               {cities.length === 0 ? <option value="">Select City</option> : null}
@@ -107,6 +114,7 @@ export default function ManualLeadModal({
                 </option>
               ))}
             </select>
+            <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] group-hover:text-[#1D4ED8] transition-colors pointer-events-none" />
           </div>
         </div>
       )
@@ -114,16 +122,23 @@ export default function ManualLeadModal({
 
     if (field.key === 'plotOwned') {
       return (
-        <div key={field.key}>
-          {commonLabel}
-          <select
-            value={form.plotOwned ? 'Yes' : 'No'}
-            onChange={(event) => updateForm('plotOwned', event.target.value === 'Yes')}
-            className={inputClass}
-          >
-            <option value="No">No</option>
-            <option value="Yes">Yes</option>
-          </select>
+        <div key={field.key} className="group">
+          <label className={fieldLabelClass}>
+            {field.label}
+            {field.required ? <span className="text-[#DC2626]"> *</span> : null}
+          </label>
+          <div className="relative">
+            <CheckCircle2 size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94A3B8] group-hover:text-[#1D4ED8] transition-colors pointer-events-none" />
+            <select
+              value={form.plotOwned ? 'Yes' : 'No'}
+              onChange={(event) => updateForm('plotOwned', event.target.value === 'Yes')}
+              className={selectWithIconClass}
+            >
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+            </select>
+            <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] group-hover:text-[#1D4ED8] transition-colors pointer-events-none" />
+          </div>
         </div>
       )
     }
@@ -143,24 +158,35 @@ export default function ManualLeadModal({
             ? form.plotUnit
             : ''
 
+      const Icon = field.key === 'buildType' ? Building2 : undefined
+
       return (
-        <div key={field.key}>
-          {commonLabel}
-          <select
-            value={value}
-            onChange={(event) =>
-              updateForm(field.key === 'plotSizeUnit' ? 'plotUnit' : field.key, event.target.value)
-            }
-            className={inputClass}
-            required={field.required}
-          >
-            <option value="">{field.placeholder || 'Select...'}</option>
-            {options.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+        <div key={field.key} className="group">
+          <label className={fieldLabelClass}>
+            {field.label}
+            {field.required ? <span className="text-[#DC2626]"> *</span> : null}
+          </label>
+          <div className="relative">
+            {Icon && (
+              <Icon size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94A3B8] group-hover:text-[#1D4ED8] transition-colors pointer-events-none" />
+            )}
+            <select
+              value={value}
+              onChange={(event) =>
+                updateForm(field.key === 'plotSizeUnit' ? 'plotUnit' : field.key, event.target.value)
+              }
+              className={Icon ? selectWithIconClass : selectClass}
+              required={field.required}
+            >
+              <option value="">{field.placeholder || 'Select...'}</option>
+              {options.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] group-hover:text-[#1D4ED8] transition-colors pointer-events-none" />
+          </div>
         </div>
       )
     }
@@ -170,61 +196,58 @@ export default function ManualLeadModal({
         ? User
         : field.key === 'email'
           ? Mail
-          : field.key === 'phone'
+        : field.key === 'phone'
             ? Phone
-            : field.key === 'budget'
-              ? DollarSign
-              : undefined
+        : field.key === 'budget'
+            ? DollarSign
+            : undefined
 
     const value =
       field.key === 'name'
         ? form.name
         : field.key === 'email'
           ? form.email
-          : field.key === 'phone'
-            ? form.phone
-            : field.key === 'budget'
-              ? form.budget
-              : field.key === 'campaign'
-                ? form.campaign
-                : field.key === 'plotSize'
-                  ? form.plotSize
-                  : ''
+        : field.key === 'phone'
+          ? form.phone
+        : field.key === 'budget'
+          ? form.budget
+        : field.key === 'campaign'
+          ? form.campaign
+          : field.key === 'plotSize'
+            ? form.plotSize
+            : ''
 
     const inputType =
       field.type === 'email'
         ? 'email'
         : field.type === 'number'
           ? 'number'
-          : field.key === 'phone'
-            ? 'tel'
-            : 'text'
-
-    const content = (
-      <input
-        type={inputType}
-        value={value}
-        onChange={(event) => updateForm(field.key === 'plotSize' ? 'plotSize' : field.key as keyof typeof form, event.target.value)}
-        placeholder={field.placeholder || ''}
-        className={icon ? 'w-full px-3 py-2 pl-8 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] placeholder-[#CBD5E1] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/20 focus:border-[#1D4ED8]' : inputClass}
-        required={field.required}
-      />
-    )
+        : field.key === 'phone'
+          ? 'tel'
+          : 'text'
 
     return (
-      <div key={field.key}>
-        {commonLabel}
-        {icon ? (
-          <div className="relative">
-            {(() => {
+      <div key={field.key} className="group">
+        <label className={fieldLabelClass}>
+          {field.label}
+          {field.required ? <span className="text-[#DC2626]"> *</span> : null}
+        </label>
+        <div className="relative">
+          {icon && (
+            (() => {
               const Icon = icon
-              return <Icon size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
-            })()}
-            {content}
-          </div>
-        ) : (
-          content
-        )}
+              return <Icon size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94A3B8] group-hover:text-[#1D4ED8] transition-colors pointer-events-none" />
+            })()
+          )}
+          <input
+            type={inputType}
+            value={value}
+            onChange={(event) => updateForm(field.key as keyof typeof form, event.target.value)}
+            placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}...`}
+            className={icon ? selectWithIconClass : inputClass}
+            required={field.required}
+          />
+        </div>
       </div>
     )
   }
@@ -294,9 +317,38 @@ export default function ManualLeadModal({
             </div>
 
             {plotSizeField || plotSizeUnitField ? (
-              <div className="grid grid-cols-2 gap-2">
-                {plotSizeField ? renderField(plotSizeField) : <div />}
-                {plotSizeUnitField ? renderField(plotSizeUnitField) : <div />}
+              <div className="grid grid-cols-2 gap-2 group">
+                <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1 group-focus-within:text-[#1D4ED8] transition-colors col-span-2">
+                  {plotSizeField?.label || 'Plot Size'}
+                  {plotSizeUnitField ? ' & Units' : ''}
+                </label>
+                <div className="flex gap-2">
+                  {plotSizeField ? (
+                    <input
+                      type="text"
+                      value={form.plotSize}
+                      onChange={(e) => updateForm('plotSize', e.target.value)}
+                      placeholder={plotSizeField.placeholder || 'Size...'}
+                      className="flex-1 px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] font-medium focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all"
+                    />
+                  ) : (
+                    <div className="flex-1" />
+                  )}
+                  {plotSizeUnitField ? (
+                    <div className="relative w-28">
+                      <select
+                        value={form.plotUnit}
+                        onChange={(e) => updateForm('plotUnit', e.target.value)}
+                        className="w-full appearance-none px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs font-medium text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all cursor-pointer"
+                      >
+                        {(plotSizeUnitField.options || []).map((unit) => (
+                          <option key={unit} value={unit}>{unit}</option>
+                        ))}
+                      </select>
+                      <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] group-hover:text-[#1D4ED8] transition-colors pointer-events-none" />
+                    </div>
+                  ) : null}
+                </div>
               </div>
             ) : null}
           </div>

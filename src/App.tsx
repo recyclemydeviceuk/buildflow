@@ -7,6 +7,7 @@ import PerformanceDashboard from './pages/PerformanceDashboard'
 import LeadList from './pages/LeadList'
 import LeadDetail from './pages/LeadDetail'
 import ReminderCenter from './pages/ReminderCenter'
+import FollowUps from './pages/FollowUps'
 import PerformanceDashboardConnected from './pages/PerformanceDashboardConnected'
 import TeamPerformance from './pages/TeamPerformance'
 import TeamPerformanceDetail from './pages/TeamPerformanceDetail'
@@ -57,6 +58,7 @@ function AppRoutes() {
           <Route path="leads" element={<LeadList />} />
           <Route path="leads/:id" element={<LeadDetail />} />
           <Route path="reminders" element={<ReminderCenter />} />
+          <Route path="follow-ups" element={<FollowUps />} />
           <Route path="performance" element={role === 'manager' ? <TeamPerformance /> : <PerformanceDashboard />} />
           {role === 'manager' && <Route path="performance/:id" element={<TeamPerformanceDetail />} />}
           <Route path="my-performance" element={role === 'manager' ? <PerformanceDashboardConnected /> : <PerformanceDashboard />} />

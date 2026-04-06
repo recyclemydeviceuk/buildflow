@@ -119,6 +119,7 @@ export default function LeadDetail() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { socket, connected } = useSocket()
+  const canAssignOwner = user?.role === 'manager' || user?.role === 'representative'
   const [lead, setLead] = useState<Lead | null>(null)
   const [loading, setLoading] = useState(true)
   const [featureControls, setFeatureControls] = useState(DEFAULT_FEATURE_CONTROLS)
@@ -256,11 +257,11 @@ export default function LeadDetail() {
       fetchLeadData()
       fetchCallLogs()
       fetchFilters()
-      if (user?.role === 'manager') {
+      if (canAssignOwner) {
         fetchRepresentatives()
       }
     }
-  }, [id, user?.role])
+  }, [id, canAssignOwner])
 
   useEffect(() => {
     if (lead?._id) {
@@ -289,7 +290,7 @@ export default function LeadDetail() {
   }, [])
 
   useEffect(() => {
-    if (!socket || !connected || user?.role !== 'manager') return
+    if (!socket || !connected || !canAssignOwner) return
 
     const handleAvailabilityUpdate = (payload: any) => {
       setRepresentatives((current) =>
@@ -311,7 +312,7 @@ export default function LeadDetail() {
     return () => {
       socket.off('user:availability_updated', handleAvailabilityUpdate)
     }
-  }, [socket, connected, user?.role])
+  }, [socket, connected, canAssignOwner])
 
   const fetchLeadData = async () => {
     try {
@@ -479,6 +480,10 @@ export default function LeadDetail() {
     try {
       const res = await leadsAPI.assignLead(id!, assignedTo)
       if (res.success) {
+        if (user?.role === 'representative' && assignedTo && String(assignedTo) !== String(user.id)) {
+          navigate('/leads')
+          return
+        }
         setLead(res.data)
       }
     } catch (err) {
@@ -1253,11 +1258,13 @@ export default function LeadDetail() {
 
                     <div>
                       <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">Assigned To</label>
-                      {user?.role === 'manager' ? (
+                      {canAssignOwner ? (
                         <RepresentativePicker
                           value={lead.owner ? String(lead.owner) : null}
                           onChange={(nextValue) => handleAssignLead(nextValue)}
                           options={representatives}
+                          allowUnassigned={user?.role === 'manager'}
+                          placeholder={user?.role === 'representative' ? 'Transfer lead' : 'Unassigned'}
                         />
                       ) : (
                         <div className="flex items-center gap-2 px-2.5 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg">

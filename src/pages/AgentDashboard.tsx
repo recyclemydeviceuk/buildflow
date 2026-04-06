@@ -563,7 +563,7 @@ export default function AgentDashboard() {
                 <div className="p-10 text-center">
                   <p className="text-slate-400 text-sm">No leads assigned to you yet.</p>
                   <p className="text-[10px] text-slate-300 mt-1">
-                    {dashboard?.manualAssignmentEnabled ? 'Wait for manager to assign.' : 'Leads route automatically.'}
+                    {dashboard?.manualAssignmentEnabled ? 'Wait for assignment or transfer.' : 'Leads route automatically.'}
                   </p>
                 </div>
               ) : dashboard.leads.map(lead => {
@@ -716,7 +716,7 @@ export default function AgentDashboard() {
               </div>
               <p className="text-[10px] text-slate-500 leading-relaxed">
                 {dashboard?.manualAssignmentEnabled
-                  ? 'Managers assign leads manually. You only see leads once assigned.'
+                  ? 'Managers assign new leads manually, and representatives can transfer leads between each other.'
                   : 'New leads route automatically in real-time. Pipeline updates instantly.'}
               </p>
             </div>

@@ -9,6 +9,7 @@ import BulkEditLeadsModal from '../components/leads/BulkEditLeadsModal'
 import ManualLeadModal from '../components/leads/ManualLeadModal'
 import ExportLeadsModal from '../components/leads/ExportLeadsModal'
 import RepresentativePicker, { type RepresentativePickerOption } from '../components/leads/RepresentativePicker'
+import DateRangePicker, { type DateRange } from '../components/common/DateRangePicker'
 import { useAuth } from '../context/AuthContext'
 import { useSocket } from '../context/SocketContext'
 import { LEAD_FIELDS_STORAGE_KEY, LEAD_FIELDS_UPDATED_EVENT } from '../utils/leadFields'
@@ -42,6 +43,7 @@ type PersistedLeadFilters = {
   paginationMode: 'on' | 'off'
   search: string
   source: string
+  dateRange: { from: string | null; to: string | null }
 }
 
 const readPersistedLeadFilters = (): PersistedLeadFilters => {
@@ -53,6 +55,7 @@ const readPersistedLeadFilters = (): PersistedLeadFilters => {
       paginationMode: 'on',
       search: '',
       source: 'All',
+      dateRange: { from: null, to: null },
     }
   }
 
@@ -66,6 +69,7 @@ const readPersistedLeadFilters = (): PersistedLeadFilters => {
         paginationMode: 'on',
         search: '',
         source: 'All',
+        dateRange: { from: null, to: null },
       }
     }
 
@@ -77,6 +81,7 @@ const readPersistedLeadFilters = (): PersistedLeadFilters => {
       paginationMode: parsed.paginationMode === 'off' ? 'off' : 'on',
       search: parsed.search || '',
       source: parsed.source || 'All',
+      dateRange: parsed.dateRange || { from: null, to: null },
     }
   } catch {
     return {
@@ -86,6 +91,7 @@ const readPersistedLeadFilters = (): PersistedLeadFilters => {
       paginationMode: 'on',
       search: '',
       source: 'All',
+      dateRange: { from: null, to: null },
     }
   }
 }
@@ -95,6 +101,7 @@ export default function LeadList() {
   const { user } = useAuth()
   const { socket, connected } = useSocket()
   const isManager = user?.role === 'manager'
+  const canAssignOwner = user?.role === 'manager' || user?.role === 'representative'
   const [persistedFilters] = useState(readPersistedLeadFilters)
 
   const [leads, setLeads] = useState<Lead[]>([])
@@ -104,6 +111,10 @@ export default function LeadList() {
   const [filterSource, setFilterSource] = useState<string>(persistedFilters.source)
   const [filterCity, setFilterCity] = useState<string>(persistedFilters.city)
   const [filterOwner, setFilterOwner] = useState<string>(persistedFilters.owner)
+  const [dateRange, setDateRange] = useState<DateRange>({
+    from: persistedFilters.dateRange.from ? new Date(persistedFilters.dateRange.from) : null,
+    to: persistedFilters.dateRange.to ? new Date(persistedFilters.dateRange.to) : null,
+  })
   const [showManualLead, setShowManualLead] = useState(false)
   const [showBulkEditModal, setShowBulkEditModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
@@ -144,10 +155,10 @@ export default function LeadList() {
 
   useEffect(() => {
     fetchFilters()
-    if (isManager) {
+    if (user) {
       fetchTeam()
     }
-  }, [isManager])
+  }, [user])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -161,9 +172,13 @@ export default function LeadList() {
         paginationMode,
         search,
         source: filterSource,
+        dateRange: {
+          from: dateRange.from ? dateRange.from.toISOString() : null,
+          to: dateRange.to ? dateRange.to.toISOString() : null,
+        },
       })
     )
-  }, [filterCity, filterDisposition, filterOwner, filterSource, paginationMode, search])
+  }, [filterCity, filterDisposition, filterOwner, filterSource, paginationMode, search, dateRange])
 
   useEffect(() => {
     const handleLeadFieldsUpdated = () => {
@@ -186,7 +201,7 @@ export default function LeadList() {
   }, [])
 
   useEffect(() => {
-    if (!socket || !connected || !isManager) return
+    if (!socket || !connected) return
 
     const handleAvailabilityUpdate = (payload: any) => {
       setRepresentatives((current) =>
@@ -208,7 +223,7 @@ export default function LeadList() {
     return () => {
       socket.off('user:availability_updated', handleAvailabilityUpdate)
     }
-  }, [socket, connected, isManager])
+  }, [socket, connected])
 
   useEffect(() => {
     if (!socket || !connected) return
@@ -231,7 +246,7 @@ export default function LeadList() {
       socket.off('lead:assigned', handleLeadRefresh)
       socket.off('lead:deleted', handleLeadRefresh)
     }
-  }, [socket, connected, pagination.page, search, filterDisposition, filterSource, filterCity, filterOwner, isManager, paginationMode])
+  }, [socket, connected, pagination.page, search, filterDisposition, filterSource, filterCity, filterOwner, isManager, paginationMode, dateRange])
 
   // Handle scroll for infinite scroll
   const handleScroll = useCallback(() => {
@@ -250,7 +265,7 @@ export default function LeadList() {
     } else {
       initInfiniteScroll()
     }
-  }, [search, filterDisposition, filterSource, filterCity, filterOwner, isManager, paginationMode])
+  }, [search, filterDisposition, filterSource, filterCity, filterOwner, isManager, paginationMode, dateRange])
 
   // Attach scroll listener for infinite scroll mode
   useEffect(() => {
@@ -273,6 +288,20 @@ export default function LeadList() {
       if (filterSource !== 'All') params.source = filterSource
       if (filterCity !== 'All') params.city = filterCity
       if (isManager && filterOwner !== 'All') params.owner = filterOwner
+      
+      // Fix date range handling - ensure proper ISO format and inclusive dates
+      if (dateRange.from) {
+        const fromDate = new Date(dateRange.from)
+        fromDate.setHours(0, 0, 0, 0) // Start of day
+        params.dateFrom = fromDate.toISOString()
+      }
+      if (dateRange.to) {
+        const toDate = new Date(dateRange.to)
+        toDate.setHours(23, 59, 59, 999) // End of day
+        params.dateTo = toDate.toISOString()
+      }
+      
+      console.log('Date filter params:', { dateFrom: params.dateFrom, dateTo: params.dateTo })
 
       const response = await leadsAPI.getLeads(params)
       if (response.success) {
@@ -306,6 +335,18 @@ export default function LeadList() {
       if (filterSource !== 'All') params.source = filterSource
       if (filterCity !== 'All') params.city = filterCity
       if (isManager && filterOwner !== 'All') params.owner = filterOwner
+      
+      // Fix date range handling
+      if (dateRange.from) {
+        const fromDate = new Date(dateRange.from)
+        fromDate.setHours(0, 0, 0, 0)
+        params.dateFrom = fromDate.toISOString()
+      }
+      if (dateRange.to) {
+        const toDate = new Date(dateRange.to)
+        toDate.setHours(23, 59, 59, 999)
+        params.dateTo = toDate.toISOString()
+      }
 
       const response = await leadsAPI.getLeads(params)
       if (response.success) {
@@ -334,6 +375,18 @@ export default function LeadList() {
       if (filterSource !== 'All') params.source = filterSource
       if (filterCity !== 'All') params.city = filterCity
       if (isManager && filterOwner !== 'All') params.owner = filterOwner
+      
+      // Fix date range handling
+      if (dateRange.from) {
+        const fromDate = new Date(dateRange.from)
+        fromDate.setHours(0, 0, 0, 0)
+        params.dateFrom = fromDate.toISOString()
+      }
+      if (dateRange.to) {
+        const toDate = new Date(dateRange.to)
+        toDate.setHours(23, 59, 59, 999)
+        params.dateTo = toDate.toISOString()
+      }
 
       const response = await leadsAPI.getLeads(params)
       if (response.success) {
@@ -435,7 +488,8 @@ export default function LeadList() {
     filterDisposition !== 'All' ||
     filterSource !== 'All' ||
     filterCity !== 'All' ||
-    (isManager && filterOwner !== 'All')
+    (isManager && filterOwner !== 'All') ||
+    Boolean(dateRange.from || dateRange.to)
 
   const clearFilters = () => {
     setFilterDisposition('All')
@@ -443,6 +497,7 @@ export default function LeadList() {
     setFilterCity('All')
     setFilterOwner('All')
     setSearch('')
+    setDateRange({ from: null, to: null })
   }
 
   const handleRefresh = async () => {
@@ -451,7 +506,7 @@ export default function LeadList() {
       await Promise.all([
         paginationMode === 'on' ? fetchLeads(pagination.page, true) : initInfiniteScroll(),
         fetchFilters(),
-        isManager ? fetchTeam() : Promise.resolve(),
+        user ? fetchTeam() : Promise.resolve(),
       ])
     } finally {
       setRefreshing(false)
@@ -715,19 +770,19 @@ export default function LeadList() {
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-center gap-1 flex-wrap">
           {selectedLeadIds.length ? (
-            <div className="px-2.5 py-1 rounded-lg bg-[#FFF7ED] text-[#C2410C] text-xs font-bold border border-[#FED7AA]">
+            <div className="px-2 py-0.5 rounded-md bg-[#FFF7ED] text-[#C2410C] text-[10px] font-bold border border-[#FED7AA]">
               {selectedLeadIds.length} selected
             </div>
           ) : null}
-          <div className="relative flex-1 min-w-44">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
+          <div className="relative flex-1 min-w-32">
+            <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, city or phone..."
-              className="w-full pl-8 pr-3 h-8 bg-white border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] placeholder-[#94A3B8] shadow-sm focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/30 focus:border-[#1D4ED8] transition-all"
+              placeholder="Search..."
+              className="w-full pl-6 pr-2 h-7 bg-white border border-gray-200 rounded-md text-[10px] text-[#0F172A] placeholder-[#94A3B8] shadow-sm focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/30 focus:border-[#1D4ED8] transition-colors"
             />
           </div>
 
@@ -735,27 +790,27 @@ export default function LeadList() {
             value={filterDisposition}
             onChange={setFilterDisposition}
             options={dispositionOptions}
-            placeholder="All Dispositions"
-            minWidth={160}
-            panelWidth={260}
+            placeholder="Disposition"
+            minWidth={70}
+            panelWidth={200}
           />
 
           <FancyDropdown
             value={filterSource}
             onChange={setFilterSource}
             options={sourceOptions}
-            placeholder="All Sources"
-            minWidth={140}
-            panelWidth={240}
+            placeholder="Source"
+            minWidth={70}
+            panelWidth={180}
           />
 
           <FancyDropdown
             value={filterCity}
             onChange={setFilterCity}
             options={cityOptions}
-            placeholder="All Cities"
-            minWidth={130}
-            panelWidth={240}
+            placeholder="City"
+            minWidth={70}
+            panelWidth={180}
           />
 
           {isManager ? (
@@ -763,18 +818,25 @@ export default function LeadList() {
               value={filterOwner}
               onChange={setFilterOwner}
               options={ownerOptions}
-              placeholder="All Owners"
-              minWidth={140}
-              panelWidth={280}
+              placeholder="Owner"
+              minWidth={70}
+              panelWidth={200}
             />
           ) : null}
+
+          <DateRangePicker
+            value={dateRange}
+            onChange={setDateRange}
+            placeholder="Date"
+            className="min-w-[70px]"
+          />
 
           {hasFilters ? (
             <button
               onClick={clearFilters}
-              className="inline-flex items-center gap-1 h-8 px-2.5 text-xs font-semibold text-[#DC2626] bg-[#FEF2F2] border border-[#FECACA] rounded-lg hover:bg-[#FEE2E2] transition-colors"
+              className="inline-flex items-center gap-0.5 h-7 px-2 text-[10px] font-semibold text-[#DC2626] bg-[#FEF2F2] border border-[#FECACA] rounded-md hover:bg-[#FEE2E2] transition-colors"
             >
-              <X size={11} /> Clear
+              <X size={9} /> Clear
             </button>
           ) : null}
         </div>
@@ -794,7 +856,7 @@ export default function LeadList() {
                     className="h-3.5 w-3.5 rounded border-[#CBD5E1] text-[#1D4ED8] focus:ring-[#1D4ED8]"
                   />
                 </th>
-                {['Lead', 'Source', 'City', 'Owner', 'Disposition', 'Created At', 'Actions', ''].map((heading) => (
+                {['Lead', 'Source', 'City', 'Owner', 'Disposition', 'Created At', isManager ? 'Actions' : '', ''].filter(Boolean).map((heading) => (
                   <th
                     key={heading}
                     className="px-3 py-2.5 text-left text-[9px] font-bold text-[#94A3B8] uppercase tracking-wider whitespace-nowrap"
@@ -824,7 +886,7 @@ export default function LeadList() {
                     <p className="text-[#94A3B8] text-xs mt-1">
                       {isManager
                         ? 'New leads will appear here as unassigned until a manager routes them manually.'
-                        : 'You will only see leads assigned to you.'}
+                        : 'You will only see leads currently assigned to you.'}
                     </p>
                   </td>
                 </tr>
@@ -870,12 +932,13 @@ export default function LeadList() {
                         </div>
                       </td>
                       <td className="px-3 py-2.5">
-                        {isManager ? (
+                        {canAssignOwner ? (
                           <div onClick={(event) => event.stopPropagation()}>
                             <RepresentativePicker
                               value={lead.owner ? String(lead.owner) : null}
                               onChange={(nextValue) => { handleAssignLead(lead._id, nextValue) }}
                               options={representatives}
+                              allowUnassigned={isManager}
                               disabled={assigningLeadId === lead._id}
                               compact
                             />
@@ -917,7 +980,15 @@ export default function LeadList() {
                             <Trash2 size={11} />
                             {deletingLeadId === lead._id ? '…' : 'Delete'}
                           </button>
-                        ) : null}
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/leads/${lead._id}`)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8] text-[10px] font-bold hover:bg-[#DBEAFE] transition-colors"
+                          >
+                            View
+                          </button>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-right">
                         <ChevronRight size={12} className="text-[#CBD5E1] inline" />
@@ -978,8 +1049,9 @@ export default function LeadList() {
 
       {showBulkEditModal ? (
         <BulkEditLeadsModal
+          allowUnassigned={isManager}
+          canAssignOwner={canAssignOwner}
           dispositions={dispositions.filter((disposition) => disposition !== 'All')}
-          isManager={isManager}
           onClose={() => setShowBulkEditModal(false)}
           onSubmit={handleBulkUpdate}
           representatives={representatives}

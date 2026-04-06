@@ -4,8 +4,9 @@ import type { BulkUpdateLeadsPayload } from '../../api/leads'
 import type { RepresentativePickerOption } from './RepresentativePicker'
 
 interface BulkEditLeadsModalProps {
+  allowUnassigned: boolean
+  canAssignOwner: boolean
   dispositions: string[]
-  isManager: boolean
   onClose: () => void
   onSubmit: (payload: Omit<BulkUpdateLeadsPayload, 'ids'>) => Promise<void> | void
   representatives: RepresentativePickerOption[]
@@ -18,8 +19,9 @@ const inputClass =
   'w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/20 focus:border-[#1D4ED8]'
 
 export default function BulkEditLeadsModal({
+  allowUnassigned,
+  canAssignOwner,
   dispositions,
-  isManager,
   onClose,
   onSubmit,
   representatives,
@@ -34,8 +36,8 @@ export default function BulkEditLeadsModal({
   const [error, setError] = useState('')
 
   const hasChanges = useMemo(
-    () => Boolean(source || disposition || (isManager && owner !== '')),
-    [disposition, isManager, owner, source]
+    () => Boolean(source || disposition || (canAssignOwner && owner !== '')),
+    [canAssignOwner, disposition, owner, source]
   )
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -66,7 +68,7 @@ export default function BulkEditLeadsModal({
         payload.statusNote = statusNote.trim()
       }
 
-      if (isManager && owner !== '') {
+      if (canAssignOwner && owner !== '') {
         payload.owner = owner === 'unassigned' ? null : owner
       }
 
@@ -135,7 +137,7 @@ export default function BulkEditLeadsModal({
             </div>
           </div>
 
-          {isManager ? (
+          {canAssignOwner ? (
             <div>
               <label className={fieldLabelClass}>Assign Representative</label>
               <select
@@ -144,7 +146,7 @@ export default function BulkEditLeadsModal({
                 className={inputClass}
               >
                 <option value="">No change</option>
-                <option value="unassigned">Unassigned</option>
+                {allowUnassigned ? <option value="unassigned">Unassigned</option> : null}
                 {representatives.map((representative) => (
                   <option key={representative.id} value={representative.id}>
                     {representative.name}

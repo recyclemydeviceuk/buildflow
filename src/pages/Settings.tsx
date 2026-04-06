@@ -1030,7 +1030,7 @@ export default function Settings({ role }: { role?: string }) {
         {renderNotificationToggle('newLeadAlerts', 'New Lead Alerts', 'Email managers and the assigned owner when a fresh lead enters BuildFlow.')}
         {renderNotificationToggle('reminderAlerts', 'Reminder Alerts', 'Get email reminders when a follow-up becomes due soon or overdue.')}
         {renderNotificationToggle('missedCallAlerts', 'Missed Call Alerts', 'Get notified when a call ends as missed, busy, or unanswered.')}
-        {renderNotificationToggle('assignmentAlerts', 'Assignment Alerts', 'Notify representatives when managers assign a lead to them.')}
+        {renderNotificationToggle('assignmentAlerts', 'Assignment Alerts', 'Notify representatives when a lead is assigned or transferred to them.')}
         {renderNotificationToggle('dailyDigest', 'Daily Digest', 'Receive a daily BuildFlow performance summary by email.')}
         {renderNotificationToggle('loginAlerts', 'Login Alerts', 'Get an email whenever your BuildFlow account signs in from a new session.')}
       </div>
@@ -1570,7 +1570,7 @@ const renderRoutingSection = () => (
       title="Lead Assignment"
       description={
         featureControls.manualAssignment
-          ? 'BuildFlow is currently using manager-controlled manual lead assignment.'
+          ? 'BuildFlow is currently using manual lead assignment with representative transfers enabled.'
           : 'Manual assignment is turned off, so this panel is showing the stored routing fallback.'
       }
     >
@@ -1598,7 +1598,7 @@ const renderRoutingSection = () => (
             {featureControls.manualAssignment ? (
               <>
                 <li>All new leads land unassigned on the manager Leads page.</li>
-                <li>Managers manually assign leads to representatives from Leads and Lead Detail.</li>
+                <li>Managers assign unowned leads, and representatives can transfer their own leads to another representative.</li>
                 <li>Representatives only see leads assigned to them.</li>
                 <li>Queue-based round robin and live queue flows are disabled.</li>
               </>
@@ -1641,7 +1641,7 @@ const renderRoutingSection = () => (
           {renderFeatureToggle(
             'manualAssignment',
             'Manual Assignment',
-            'Keep new leads under manager control until someone assigns them.'
+            'Keep new leads under manager control until someone assigns or transfers them.'
           )}
           {renderFeatureToggle(
             'dialer',

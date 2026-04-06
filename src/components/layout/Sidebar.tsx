@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Bell, BarChart2,
-  FileText, Shield, Settings, Link2, BarChart3, Phone, LogOut
+  FileText, Shield, Settings, Link2, BarChart3, Phone, LogOut, CalendarClock
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { UserRole } from '../../App'
@@ -25,7 +25,8 @@ const managerNav = [
   { label: 'Leads', icon: Users, path: '/leads' },
   { label: 'Dialer', icon: Phone, path: '/dialer' },
   { label: 'Call Log', icon: Phone, path: '/call-log' },
-  { label: 'Reminders', icon: Bell, path: '/reminders' },
+  { label: 'Follow Ups', icon: CalendarClock, path: '/follow-ups' },
+  { label: 'Call Reminders', icon: Bell, path: '/reminders' },
   { label: 'Analytics', icon: BarChart3, path: '/analytics' },
   { label: 'Performance', icon: BarChart2, path: '/performance' },
   { label: 'Reports', icon: FileText, path: '/reports' },
@@ -38,7 +39,8 @@ const repNav = [
   { label: 'My Leads', icon: Users, path: '/leads' },
   { label: 'Dialer', icon: Phone, path: '/dialer' },
   { label: 'Call Log', icon: Phone, path: '/call-log' },
-  { label: 'Reminders', icon: Bell, path: '/reminders' },
+  { label: 'Follow Ups', icon: CalendarClock, path: '/follow-ups' },
+  { label: 'Call Reminders', icon: Bell, path: '/reminders' },
   { label: 'Performance', icon: BarChart2, path: '/performance' },
 ]
 
