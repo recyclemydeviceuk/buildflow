@@ -31,13 +31,14 @@ export default function BulkEditLeadsModal({
   const [source, setSource] = useState('')
   const [disposition, setDisposition] = useState('')
   const [owner, setOwner] = useState('')
+  const [createdAt, setCreatedAt] = useState('')
   const [statusNote, setStatusNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   const hasChanges = useMemo(
-    () => Boolean(source || disposition || (canAssignOwner && owner !== '')),
-    [canAssignOwner, disposition, owner, source]
+    () => Boolean(source || disposition || createdAt || (canAssignOwner && owner !== '')),
+    [canAssignOwner, createdAt, disposition, owner, source]
   )
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -70,6 +71,10 @@ export default function BulkEditLeadsModal({
 
       if (canAssignOwner && owner !== '') {
         payload.owner = owner === 'unassigned' ? null : owner
+      }
+
+      if (createdAt) {
+        payload.createdAt = new Date(createdAt).toISOString()
       }
 
       await onSubmit(payload)
@@ -155,6 +160,18 @@ export default function BulkEditLeadsModal({
               </select>
             </div>
           ) : null}
+
+          <div>
+            <label className={fieldLabelClass}>Created At</label>
+            <input
+              type="datetime-local"
+              value={createdAt}
+              onChange={(event) => setCreatedAt(event.target.value)}
+              step={60}
+              className={inputClass}
+            />
+            <p className="mt-1 px-1 text-[11px] text-[#64748B]">Leave blank for no change. This uses your local date and time.</p>
+          </div>
 
           {disposition ? (
             <div>

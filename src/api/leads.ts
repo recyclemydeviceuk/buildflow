@@ -114,6 +114,7 @@ export interface BulkUpdateLeadsPayload {
   source?: string
   disposition?: string
   owner?: string | null
+  createdAt?: string
   statusNote?: string
 }
 

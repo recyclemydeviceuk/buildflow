@@ -66,6 +66,33 @@ const getCallSecondaryLabel = (call?: Call | null) => {
   return call.exophoneNumber || call.phone
 }
 
+const formatDateTimeLocalInput = (value?: string | null) => {
+  if (!value) return ''
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+const formatLeadCreatedAtLabel = (value?: string | null) => {
+  if (!value) return 'Unknown'
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Unknown'
+
+  return date.toLocaleString('en-IN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+}
+
 const legStatusConfig: Record<string, { label: string; color: string; bg: string }> = {
   completed: { label: 'Picked', color: '#16A34A', bg: '#F0FDF4' },
   unanswered: { label: 'No Answer', color: '#DC2626', bg: '#FEF2F2' },
@@ -153,6 +180,7 @@ export default function LeadDetail() {
   const [micState, setMicState] = useState<MicState>('idle')
   const [editableName, setEditableName] = useState('')
   const [editablePhone, setEditablePhone] = useState('')
+  const [editableCreatedAt, setEditableCreatedAt] = useState('')
   const [isDeletingLead, setIsDeletingLead] = useState(false)
   const [followUps, setFollowUps] = useState<FollowUp[]>([])
   const [showFollowUpForm, setShowFollowUpForm] = useState(false)
@@ -329,6 +357,7 @@ export default function LeadDetail() {
         setFailedReason(res.data.failedReason || '')
         setEditableName(res.data.name || '')
         setEditablePhone(res.data.phone || '')
+        setEditableCreatedAt(formatDateTimeLocalInput(res.data.createdAt))
         setSelectedNoteStatus((current) => current || res.data.disposition)
       }
     } catch (err) {
@@ -470,6 +499,7 @@ export default function LeadDetail() {
         setLead(res.data)
         setEditableName(res.data.name || '')
         setEditablePhone(res.data.phone || '')
+        setEditableCreatedAt(formatDateTimeLocalInput(res.data.createdAt))
       }
     } catch (err) {
       console.error('Failed to update lead:', err)
@@ -511,6 +541,20 @@ export default function LeadDetail() {
       return
     }
     await handleSaveQualification('phone', nextPhone)
+  }
+
+  const saveCreatedAt = async () => {
+    if (!lead) return
+
+    const nextCreatedAt = editableCreatedAt.trim()
+    const currentCreatedAt = formatDateTimeLocalInput(lead.createdAt)
+
+    if (!nextCreatedAt || nextCreatedAt === currentCreatedAt) {
+      setEditableCreatedAt(currentCreatedAt)
+      return
+    }
+
+    await handleSaveQualification('createdAt', new Date(nextCreatedAt).toISOString())
   }
 
   const resetStatusNoteComposer = () => {
@@ -909,7 +953,7 @@ export default function LeadDetail() {
               <h1 className="text-sm font-bold text-[#0F172A]">{lead.name}</h1>
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#EFF6FF] text-[#1D4ED8]">{lead.source}</span>
             </div>
-            <p className="text-xs text-[#94A3B8] mt-0.5">Lead ID: {lead._id} · Created {new Date(lead.createdAt).toLocaleDateString()}</p>
+            <p className="text-xs text-[#94A3B8] mt-0.5">Lead ID: {lead._id} · Created {formatLeadCreatedAtLabel(lead.createdAt)}</p>
           </div>
         </div>
       </div>
@@ -984,6 +1028,35 @@ export default function LeadDetail() {
                           placeholder={contactNameField?.placeholder || 'Customer name'}
                           className="w-full pl-9 pr-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm leading-tight text-[#0F172A] font-semibold focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/10 focus:border-[#1D4ED8] focus:bg-white transition-all"
                         />
+                      </div>
+
+                      <div className="mt-3">
+                        <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">
+                          Created At
+                        </label>
+                        <div className="relative group">
+                          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8] group-focus-within:text-[#1D4ED8] transition-colors">
+                            <Calendar size={16} />
+                          </div>
+                          <input
+                            type="datetime-local"
+                            value={editableCreatedAt}
+                            onChange={(e) => setEditableCreatedAt(e.target.value)}
+                            step={60}
+                            className="w-full pl-9 pr-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm leading-tight text-[#0F172A] font-semibold focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/10 focus:border-[#1D4ED8] focus:bg-white transition-all"
+                          />
+                        </div>
+                        <div className="mt-1 flex items-center justify-between gap-2 px-1">
+                          <p className="text-[10px] text-[#94A3B8]">Uses your local date and time.</p>
+                          <button
+                            type="button"
+                            onClick={() => void saveCreatedAt()}
+                            disabled={!editableCreatedAt || editableCreatedAt === formatDateTimeLocalInput(lead.createdAt)}
+                            className="px-2.5 py-1 rounded-md bg-[#0F172A] text-white text-[9px] font-bold hover:bg-[#1E293B] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            Save
+                          </button>
+                        </div>
                       </div>
                     </div>
                     <div>

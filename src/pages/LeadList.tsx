@@ -96,12 +96,28 @@ const readPersistedLeadFilters = (): PersistedLeadFilters => {
   }
 }
 
+const formatDateTimeLocalInput = (value?: string | null) => {
+  if (!value) return ''
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
 export default function LeadList() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { socket, connected } = useSocket()
   const isManager = user?.role === 'manager'
   const canAssignOwner = user?.role === 'manager' || user?.role === 'representative'
+  const canEditCreatedAt = user?.role === 'manager' || user?.role === 'representative'
   const [persistedFilters] = useState(readPersistedLeadFilters)
 
   const [leads, setLeads] = useState<Lead[]>([])
@@ -122,6 +138,9 @@ export default function LeadList() {
   const [assigningLeadId, setAssigningLeadId] = useState<string | null>(null)
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([])
   const [deletingLeadId, setDeletingLeadId] = useState<string | null>(null)
+  const [editingCreatedAtLeadId, setEditingCreatedAtLeadId] = useState<string | null>(null)
+  const [createdAtDraft, setCreatedAtDraft] = useState('')
+  const [savingCreatedAtLeadId, setSavingCreatedAtLeadId] = useState<string | null>(null)
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [bulkUpdating, setBulkUpdating] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -461,6 +480,52 @@ export default function LeadList() {
       console.error('Failed to assign lead:', error)
     } finally {
       setAssigningLeadId(null)
+    }
+  }
+
+  const syncLeadInLists = (updatedLead: Lead) => {
+    setLeads((current) =>
+      current.map((lead) => (lead._id === updatedLead._id ? updatedLead : lead))
+    )
+    setInfiniteLeads((current) =>
+      current.map((lead) => (lead._id === updatedLead._id ? updatedLead : lead))
+    )
+  }
+
+  const startEditingCreatedAt = (lead: Lead) => {
+    setEditingCreatedAtLeadId(lead._id)
+    setCreatedAtDraft(formatDateTimeLocalInput(lead.createdAt))
+  }
+
+  const cancelEditingCreatedAt = () => {
+    setEditingCreatedAtLeadId(null)
+    setCreatedAtDraft('')
+  }
+
+  const handleSaveCreatedAt = async (lead: Lead) => {
+    if (!createdAtDraft.trim()) {
+      cancelEditingCreatedAt()
+      return
+    }
+
+    const nextCreatedAt = new Date(createdAtDraft)
+    if (Number.isNaN(nextCreatedAt.getTime())) {
+      return
+    }
+
+    try {
+      setSavingCreatedAtLeadId(lead._id)
+      const response = await leadsAPI.updateLead(lead._id, {
+        createdAt: nextCreatedAt.toISOString(),
+      })
+      if (!response.success) return
+
+      syncLeadInLists(response.data)
+      cancelEditingCreatedAt()
+    } catch (error) {
+      console.error('Failed to update lead created at:', error)
+    } finally {
+      setSavingCreatedAtLeadId(null)
     }
   }
 
@@ -964,10 +1029,73 @@ export default function LeadList() {
                           {lead.disposition}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5">
-                        <span className="text-[10px] font-medium text-[#475569] whitespace-nowrap">
-                          {new Date(lead.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </span>
+                      <td className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
+                        {editingCreatedAtLeadId === lead._id ? (
+                          <div className="space-y-1.5 min-w-[160px]">
+                            <input
+                              type="datetime-local"
+                              value={createdAtDraft}
+                              onChange={(event) => setCreatedAtDraft(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                  event.preventDefault()
+                                  void handleSaveCreatedAt(lead)
+                                }
+                                if (event.key === 'Escape') {
+                                  event.preventDefault()
+                                  cancelEditingCreatedAt()
+                                }
+                              }}
+                              step={60}
+                              className="w-full px-2 py-1 bg-[#F8FAFC] border border-[#CBD5E1] rounded-md text-[10px] text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/20 focus:border-[#1D4ED8]"
+                            />
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => void handleSaveCreatedAt(lead)}
+                                disabled={savingCreatedAtLeadId === lead._id || createdAtDraft === formatDateTimeLocalInput(lead.createdAt)}
+                                className="px-2 py-1 rounded-md bg-[#1D4ED8] text-white text-[9px] font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              >
+                                {savingCreatedAtLeadId === lead._id ? 'Saving...' : 'Save'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cancelEditingCreatedAt}
+                                disabled={savingCreatedAtLeadId === lead._id}
+                                className="px-2 py-1 rounded-md border border-[#E2E8F0] bg-white text-[#64748B] text-[9px] font-bold hover:bg-[#F8FAFC] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-1">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-medium text-[#475569] whitespace-nowrap">
+                                {new Date(lead.createdAt).toLocaleDateString('en-IN', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })}
+                              </span>
+                              <span className="text-[9px] text-[#94A3B8] whitespace-nowrap">
+                                {new Date(lead.createdAt).toLocaleTimeString('en-IN', {
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                })}
+                              </span>
+                            </div>
+                            {canEditCreatedAt ? (
+                              <button
+                                type="button"
+                                onClick={() => startEditingCreatedAt(lead)}
+                                className="w-fit px-2 py-1 rounded-md border border-[#DBEAFE] bg-[#EFF6FF] text-[#1D4ED8] text-[9px] font-bold hover:bg-[#DBEAFE] transition-colors"
+                              >
+                                Edit
+                              </button>
+                            ) : null}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
                         {isManager ? (
