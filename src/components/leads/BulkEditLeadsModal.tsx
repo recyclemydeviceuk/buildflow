@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { X, Save, Users } from 'lucide-react'
 import type { BulkUpdateLeadsPayload } from '../../api/leads'
+import CreatedAtEditor from './CreatedAtEditor'
 import type { RepresentativePickerOption } from './RepresentativePicker'
 
 interface BulkEditLeadsModalProps {
@@ -87,7 +88,7 @@ export default function BulkEditLeadsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-xl rounded-2xl bg-white shadow-xl overflow-hidden">
+      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-[#E2E8F0] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-[#EFF6FF] flex items-center justify-center">
@@ -162,15 +163,13 @@ export default function BulkEditLeadsModal({
           ) : null}
 
           <div>
-            <label className={fieldLabelClass}>Created At</label>
-            <input
-              type="datetime-local"
+            <CreatedAtEditor
               value={createdAt}
-              onChange={(event) => setCreatedAt(event.target.value)}
-              step={60}
-              className={inputClass}
+              onChange={setCreatedAt}
+              label="Created At"
+              helperText="Leave blank for no change. This uses your local date and time."
+              description="Update the original lead created date, time, and year for every selected lead."
             />
-            <p className="mt-1 px-1 text-[11px] text-[#64748B]">Leave blank for no change. This uses your local date and time.</p>
           </div>
 
           {disposition ? (

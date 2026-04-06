@@ -6,6 +6,7 @@ import type { LeadFieldConfig } from '../api/settings'
 import { teamAPI } from '../api/team'
 import FancyDropdown, { type FancyDropdownOption } from '../components/common/FancyDropdown'
 import BulkEditLeadsModal from '../components/leads/BulkEditLeadsModal'
+import CreatedAtEditor, { formatDateTimeLocalInput } from '../components/leads/CreatedAtEditor'
 import ManualLeadModal from '../components/leads/ManualLeadModal'
 import ExportLeadsModal from '../components/leads/ExportLeadsModal'
 import RepresentativePicker, { type RepresentativePickerOption } from '../components/leads/RepresentativePicker'
@@ -96,21 +97,6 @@ const readPersistedLeadFilters = (): PersistedLeadFilters => {
   }
 }
 
-const formatDateTimeLocalInput = (value?: string | null) => {
-  if (!value) return ''
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-
-  return `${year}-${month}-${day}T${hours}:${minutes}`
-}
-
 export default function LeadList() {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -122,6 +108,7 @@ export default function LeadList() {
 
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
+
   const [search, setSearch] = useState(persistedFilters.search)
   const [filterDisposition, setFilterDisposition] = useState<string>(persistedFilters.disposition)
   const [filterSource, setFilterSource] = useState<string>(persistedFilters.source)
@@ -140,6 +127,7 @@ export default function LeadList() {
   const [deletingLeadId, setDeletingLeadId] = useState<string | null>(null)
   const [editingCreatedAtLeadId, setEditingCreatedAtLeadId] = useState<string | null>(null)
   const [createdAtDraft, setCreatedAtDraft] = useState('')
+  const [createdAtEditorVersion, setCreatedAtEditorVersion] = useState(0)
   const [savingCreatedAtLeadId, setSavingCreatedAtLeadId] = useState<string | null>(null)
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [bulkUpdating, setBulkUpdating] = useState(false)
@@ -151,6 +139,7 @@ export default function LeadList() {
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const leadListRequestVersionRef = useRef(0)
 
   const [dispositions, setDispositions] = useState<string[]>([
     'All',
@@ -244,6 +233,129 @@ export default function LeadList() {
     }
   }, [socket, connected])
 
+  const buildLeadParams = useCallback(
+    (page: number): Record<string, string> => {
+      const params: Record<string, string> = { page: String(page), limit: '30' }
+
+      if (search.trim()) params.search = search.trim()
+      if (filterDisposition !== 'All') params.disposition = filterDisposition
+      if (filterSource !== 'All') params.source = filterSource
+      if (filterCity !== 'All') params.city = filterCity
+      if (isManager && filterOwner !== 'All') params.owner = filterOwner
+
+      if (dateRange.from) {
+        const fromDate = new Date(dateRange.from)
+        fromDate.setHours(0, 0, 0, 0)
+        params.dateFrom = fromDate.toISOString()
+      }
+
+      if (dateRange.to) {
+        const toDate = new Date(dateRange.to)
+        toDate.setHours(23, 59, 59, 999)
+        params.dateTo = toDate.toISOString()
+      }
+
+      return params
+    },
+    [search, filterDisposition, filterSource, filterCity, isManager, filterOwner, dateRange]
+  )
+
+  const fetchLeads = useCallback(
+    async (page: number, isBackgroundRefresh = false) => {
+      const requestVersion = ++leadListRequestVersionRef.current
+
+      try {
+        if (!isBackgroundRefresh) {
+          setLoading(true)
+        }
+
+        const response = await leadsAPI.getLeads(buildLeadParams(page))
+        if (!response.success || requestVersion !== leadListRequestVersionRef.current) return
+
+        setLeads(response.data)
+        setSelectedLeadIds((current) =>
+          current.filter((leadId) => response.data.some((lead) => lead._id === leadId))
+        )
+        setPagination({
+          page: response.pagination.page,
+          total: response.pagination.total,
+          pages: response.pagination.pages,
+        })
+      } catch (error) {
+        console.error('Failed to fetch leads:', error)
+      } finally {
+        if (requestVersion === leadListRequestVersionRef.current) {
+          setLoading(false)
+        }
+      }
+    },
+    [buildLeadParams]
+  )
+
+  const initInfiniteScroll = useCallback(async () => {
+    const requestVersion = ++leadListRequestVersionRef.current
+
+    try {
+      setLoading(true)
+      setLoadingMore(false)
+      const response = await leadsAPI.getLeads(buildLeadParams(1))
+      if (!response.success || requestVersion !== leadListRequestVersionRef.current) return
+
+      setInfiniteLeads(response.data)
+      setInfinitePage(1)
+      setHasMore(response.pagination.page < response.pagination.pages)
+      setSelectedLeadIds((current) =>
+        current.filter((leadId) => response.data.some((lead) => lead._id === leadId))
+      )
+      setPagination({
+        page: 1,
+        total: response.pagination.total,
+        pages: response.pagination.pages,
+      })
+    } catch (error) {
+      console.error('Failed to init infinite scroll:', error)
+    } finally {
+      if (requestVersion === leadListRequestVersionRef.current) {
+        setLoading(false)
+      }
+    }
+  }, [buildLeadParams])
+
+  const loadMoreLeads = useCallback(async () => {
+    if (loadingMore || !hasMore) return
+
+    const requestVersion = leadListRequestVersionRef.current
+
+    try {
+      setLoadingMore(true)
+      const nextPage = infinitePage + 1
+      const response = await leadsAPI.getLeads(buildLeadParams(nextPage))
+      if (!response.success || requestVersion !== leadListRequestVersionRef.current) return
+
+      if (response.data.length === 0) {
+        setHasMore(false)
+        return
+      }
+
+      setInfiniteLeads((current) => {
+        const existingIds = new Set(current.map((lead) => lead._id))
+        const nextLeads = response.data.filter((lead) => !existingIds.has(lead._id))
+        return [...current, ...nextLeads]
+      })
+      setInfinitePage(nextPage)
+      setHasMore(response.pagination.page < response.pagination.pages)
+      setPagination({
+        page: response.pagination.page,
+        total: response.pagination.total,
+        pages: response.pagination.pages,
+      })
+    } catch (error) {
+      console.error('Failed to load more leads:', error)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [loadingMore, hasMore, infinitePage, buildLeadParams])
+
   useEffect(() => {
     if (!socket || !connected) return
 
@@ -265,28 +377,25 @@ export default function LeadList() {
       socket.off('lead:assigned', handleLeadRefresh)
       socket.off('lead:deleted', handleLeadRefresh)
     }
-  }, [socket, connected, pagination.page, search, filterDisposition, filterSource, filterCity, filterOwner, isManager, paginationMode, dateRange])
+  }, [socket, connected, pagination.page, paginationMode, fetchLeads, initInfiniteScroll])
 
-  // Handle scroll for infinite scroll
   const handleScroll = useCallback(() => {
     if (paginationMode !== 'off' || !scrollContainerRef.current) return
-    
+
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current
-    // Load more when user scrolls to within 100px of bottom
     if (scrollTop + clientHeight >= scrollHeight - 100) {
-      loadMoreLeads()
+      void loadMoreLeads()
     }
-  }, [paginationMode])
+  }, [paginationMode, loadMoreLeads])
 
   useEffect(() => {
     if (paginationMode === 'on') {
-      fetchLeads(1)
+      void fetchLeads(1)
     } else {
-      initInfiniteScroll()
+      void initInfiniteScroll()
     }
-  }, [search, filterDisposition, filterSource, filterCity, filterOwner, isManager, paginationMode, dateRange])
+  }, [paginationMode, fetchLeads, initInfiniteScroll])
 
-  // Attach scroll listener for infinite scroll mode
   useEffect(() => {
     const container = scrollContainerRef.current
     if (!container || paginationMode !== 'off') return
@@ -295,135 +404,6 @@ export default function LeadList() {
     container.addEventListener('scroll', onScroll)
     return () => container.removeEventListener('scroll', onScroll)
   }, [paginationMode, handleScroll])
-
-  const fetchLeads = async (page: number, isBackgroundRefresh = false) => {
-    try {
-      if (!isBackgroundRefresh) {
-        setLoading(true)
-      }
-      const params: Record<string, string> = { page: String(page), limit: '30' }
-      if (search) params.search = search
-      if (filterDisposition !== 'All') params.disposition = filterDisposition
-      if (filterSource !== 'All') params.source = filterSource
-      if (filterCity !== 'All') params.city = filterCity
-      if (isManager && filterOwner !== 'All') params.owner = filterOwner
-      
-      // Fix date range handling - ensure proper ISO format and inclusive dates
-      if (dateRange.from) {
-        const fromDate = new Date(dateRange.from)
-        fromDate.setHours(0, 0, 0, 0) // Start of day
-        params.dateFrom = fromDate.toISOString()
-      }
-      if (dateRange.to) {
-        const toDate = new Date(dateRange.to)
-        toDate.setHours(23, 59, 59, 999) // End of day
-        params.dateTo = toDate.toISOString()
-      }
-      
-      console.log('Date filter params:', { dateFrom: params.dateFrom, dateTo: params.dateTo })
-
-      const response = await leadsAPI.getLeads(params)
-      if (response.success) {
-        setLeads(response.data)
-        setSelectedLeadIds((current) =>
-          current.filter((leadId) => response.data.some((lead) => lead._id === leadId))
-        )
-        setPagination({
-          page: response.pagination.page,
-          total: response.pagination.total,
-          pages: response.pagination.pages,
-        })
-      }
-    } catch (error) {
-      console.error('Failed to fetch leads:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Infinite scroll loading function
-  const loadMoreLeads = async () => {
-    if (loadingMore || !hasMore) return
-    
-    try {
-      setLoadingMore(true)
-      const nextPage = infinitePage + 1
-      const params: Record<string, string> = { page: String(nextPage), limit: '30' }
-      if (search) params.search = search
-      if (filterDisposition !== 'All') params.disposition = filterDisposition
-      if (filterSource !== 'All') params.source = filterSource
-      if (filterCity !== 'All') params.city = filterCity
-      if (isManager && filterOwner !== 'All') params.owner = filterOwner
-      
-      // Fix date range handling
-      if (dateRange.from) {
-        const fromDate = new Date(dateRange.from)
-        fromDate.setHours(0, 0, 0, 0)
-        params.dateFrom = fromDate.toISOString()
-      }
-      if (dateRange.to) {
-        const toDate = new Date(dateRange.to)
-        toDate.setHours(23, 59, 59, 999)
-        params.dateTo = toDate.toISOString()
-      }
-
-      const response = await leadsAPI.getLeads(params)
-      if (response.success) {
-        if (response.data.length === 0) {
-          setHasMore(false)
-        } else {
-          setInfiniteLeads((prev) => [...prev, ...response.data])
-          setInfinitePage(nextPage)
-          setHasMore(response.pagination.page < response.pagination.pages)
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load more leads:', error)
-    } finally {
-      setLoadingMore(false)
-    }
-  }
-
-  // Initial load for infinite scroll mode
-  const initInfiniteScroll = async () => {
-    try {
-      setLoading(true)
-      const params: Record<string, string> = { page: '1', limit: '30' }
-      if (search) params.search = search
-      if (filterDisposition !== 'All') params.disposition = filterDisposition
-      if (filterSource !== 'All') params.source = filterSource
-      if (filterCity !== 'All') params.city = filterCity
-      if (isManager && filterOwner !== 'All') params.owner = filterOwner
-      
-      // Fix date range handling
-      if (dateRange.from) {
-        const fromDate = new Date(dateRange.from)
-        fromDate.setHours(0, 0, 0, 0)
-        params.dateFrom = fromDate.toISOString()
-      }
-      if (dateRange.to) {
-        const toDate = new Date(dateRange.to)
-        toDate.setHours(23, 59, 59, 999)
-        params.dateTo = toDate.toISOString()
-      }
-
-      const response = await leadsAPI.getLeads(params)
-      if (response.success) {
-        setInfiniteLeads(response.data)
-        setInfinitePage(1)
-        setHasMore(response.pagination.pages > 1)
-        setPagination({
-          page: 1,
-          total: response.pagination.total,
-          pages: response.pagination.pages,
-        })
-      }
-    } catch (error) {
-      console.error('Failed to init infinite scroll:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const fetchFilters = async () => {
     try {
@@ -521,6 +501,8 @@ export default function LeadList() {
       if (!response.success) return
 
       syncLeadInLists(response.data)
+      setCreatedAtDraft(formatDateTimeLocalInput(response.data.createdAt))
+      setCreatedAtEditorVersion((v) => v + 1)
       cancelEditingCreatedAt()
     } catch (error) {
       console.error('Failed to update lead created at:', error)
@@ -1031,30 +1013,32 @@ export default function LeadList() {
                       </td>
                       <td className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
                         {editingCreatedAtLeadId === lead._id ? (
-                          <div className="space-y-1.5 min-w-[160px]">
-                            <input
-                              type="datetime-local"
+                          <div
+                            className="space-y-2 min-w-[280px] max-w-[320px]"
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault()
+                                void handleSaveCreatedAt(lead)
+                              }
+                              if (event.key === 'Escape') {
+                                event.preventDefault()
+                                cancelEditingCreatedAt()
+                              }
+                            }}
+                          >
+                            <CreatedAtEditor
+                              key={`${lead._id}-${createdAtEditorVersion}`}
+                              compact
                               value={createdAtDraft}
-                              onChange={(event) => setCreatedAtDraft(event.target.value)}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') {
-                                  event.preventDefault()
-                                  void handleSaveCreatedAt(lead)
-                                }
-                                if (event.key === 'Escape') {
-                                  event.preventDefault()
-                                  cancelEditingCreatedAt()
-                                }
-                              }}
-                              step={60}
-                              className="w-full px-2 py-1 bg-[#F8FAFC] border border-[#CBD5E1] rounded-md text-[10px] text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/20 focus:border-[#1D4ED8]"
+                              onChange={setCreatedAtDraft}
+                              helperText="Adjust the local date, time, and year."
                             />
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => void handleSaveCreatedAt(lead)}
                                 disabled={savingCreatedAtLeadId === lead._id || createdAtDraft === formatDateTimeLocalInput(lead.createdAt)}
-                                className="px-2 py-1 rounded-md bg-[#1D4ED8] text-white text-[9px] font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                className="px-3 py-1.5 rounded-lg bg-[#1D4ED8] text-white text-[10px] font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                               >
                                 {savingCreatedAtLeadId === lead._id ? 'Saving...' : 'Save'}
                               </button>
@@ -1062,7 +1046,7 @@ export default function LeadList() {
                                 type="button"
                                 onClick={cancelEditingCreatedAt}
                                 disabled={savingCreatedAtLeadId === lead._id}
-                                className="px-2 py-1 rounded-md border border-[#E2E8F0] bg-white text-[#64748B] text-[9px] font-bold hover:bg-[#F8FAFC] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] bg-white text-[#64748B] text-[10px] font-bold hover:bg-[#F8FAFC] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                               >
                                 Cancel
                               </button>

@@ -10,6 +10,7 @@ import { remindersAPI } from '../api/reminders'
 import { teamAPI } from '../api/team'
 import PostCallFeedbackModal from '../components/leads/PostCallFeedbackModal'
 import RepresentativePicker, { type RepresentativePickerOption } from '../components/leads/RepresentativePicker'
+import CreatedAtEditor, { formatDateTimeLocalInput } from '../components/leads/CreatedAtEditor'
 import CallReminderModal from '../components/reminders/CallReminderModal'
 import { useAuth } from '../context/AuthContext'
 import { useSocket } from '../context/SocketContext'
@@ -64,21 +65,6 @@ const getCallSecondaryLabel = (call?: Call | null) => {
     return call.phone
   }
   return call.exophoneNumber || call.phone
-}
-
-const formatDateTimeLocalInput = (value?: string | null) => {
-  if (!value) return ''
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-
-  return `${year}-${month}-${day}T${hours}:${minutes}`
 }
 
 const formatLeadCreatedAtLabel = (value?: string | null) => {
@@ -181,6 +167,7 @@ export default function LeadDetail() {
   const [editableName, setEditableName] = useState('')
   const [editablePhone, setEditablePhone] = useState('')
   const [editableCreatedAt, setEditableCreatedAt] = useState('')
+  const [createdAtEditorKey, setCreatedAtEditorKey] = useState(0)
   const [isDeletingLead, setIsDeletingLead] = useState(false)
   const [followUps, setFollowUps] = useState<FollowUp[]>([])
   const [showFollowUpForm, setShowFollowUpForm] = useState(false)
@@ -555,6 +542,7 @@ export default function LeadDetail() {
     }
 
     await handleSaveQualification('createdAt', new Date(nextCreatedAt).toISOString())
+    setCreatedAtEditorKey((k) => k + 1)
   }
 
   const resetStatusNoteComposer = () => {
@@ -1031,23 +1019,15 @@ export default function LeadDetail() {
                       </div>
 
                       <div className="mt-3">
-                        <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">
-                          Created At
-                        </label>
-                        <div className="relative group">
-                          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8] group-focus-within:text-[#1D4ED8] transition-colors">
-                            <Calendar size={16} />
-                          </div>
-                          <input
-                            type="datetime-local"
-                            value={editableCreatedAt}
-                            onChange={(e) => setEditableCreatedAt(e.target.value)}
-                            step={60}
-                            className="w-full pl-9 pr-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm leading-tight text-[#0F172A] font-semibold focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/10 focus:border-[#1D4ED8] focus:bg-white transition-all"
-                          />
-                        </div>
-                        <div className="mt-1 flex items-center justify-between gap-2 px-1">
-                          <p className="text-[10px] text-[#94A3B8]">Uses your local date and time.</p>
+                        <CreatedAtEditor
+                          key={createdAtEditorKey}
+                          value={editableCreatedAt}
+                          onChange={setEditableCreatedAt}
+                          label="Created At"
+                          helperText=""
+                          description="Set the lead's original created date, time, and year with a clean local editor."
+                        />
+                        <div className="mt-2 flex items-center justify-end gap-2 px-1">
                           <button
                             type="button"
                             onClick={() => void saveCreatedAt()}
