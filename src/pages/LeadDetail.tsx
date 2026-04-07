@@ -859,22 +859,48 @@ export default function LeadDetail() {
   }
 
   const handleCreateFollowUp = async () => {
-    if (!lead?._id || !followUpDate || !followUpTime) return
+    if (!lead?._id || !followUpDate || !followUpTime) {
+      console.warn('[FollowUp] Cannot create: missing lead ID, date or time')
+      return
+    }
     
     try {
       setFollowUpLoading(true)
       const scheduledAt = new Date(`${followUpDate}T${followUpTime}`).toISOString()
-      await leadsAPI.createFollowUp(lead._id, {
+      
+      console.log('[FollowUp] Creating follow-up for lead:', lead._id, 'scheduledAt:', scheduledAt)
+      
+      const response = await leadsAPI.createFollowUp(lead._id, {
         scheduledAt,
         notes: followUpNotes,
       })
-      setShowFollowUpForm(false)
-      setFollowUpDate('')
-      setFollowUpTime('')
-      setFollowUpNotes('')
-      await fetchFollowUps()
-    } catch (error) {
-      console.error('Failed to create follow-up:', error)
+      
+      console.log('[FollowUp] Create response:', response)
+      
+      if (response.success && response.data) {
+        // Optimistically add to list first for immediate UI update
+        setFollowUps((current) => [response.data, ...current].sort((a, b) => 
+          +new Date(b.scheduledAt) - +new Date(a.scheduledAt)
+        ))
+        
+        // Then fetch full list to ensure consistency
+        await fetchFollowUps()
+        
+        // Clear form and close
+        setShowFollowUpForm(false)
+        setFollowUpDate('')
+        setFollowUpTime('')
+        setFollowUpNotes('')
+        setEditingFollowUpId(null)
+        
+        console.log('[FollowUp] Successfully created and refreshed list')
+      } else {
+        console.error('[FollowUp] Create failed:', response)
+        alert('Failed to create follow-up. Please try again.')
+      }
+    } catch (error: any) {
+      console.error('[FollowUp] Error creating follow-up:', error)
+      alert(error?.response?.data?.message || 'Failed to create follow-up. Please try again.')
     } finally {
       setFollowUpLoading(false)
     }
@@ -885,10 +911,39 @@ export default function LeadDetail() {
     
     try {
       setFollowUpLoading(true)
-      await leadsAPI.updateFollowUp(lead._id, followUpId, updates)
+      
+      // Optimistically update UI first
+      setFollowUps((current) => 
+        current.map((f) => 
+          f._id === followUpId 
+            ? { ...f, ...updates, updatedAt: new Date().toISOString() }
+            : f
+        ).sort((a, b) => +new Date(b.scheduledAt) - +new Date(a.scheduledAt))
+      )
+      
+      const response = await leadsAPI.updateFollowUp(lead._id, followUpId, updates)
+      
+      if (response.success && response.data) {
+        // Update with server data
+        setFollowUps((current) => 
+          current.map((f) => 
+            f._id === followUpId ? response.data : f
+          ).sort((a, b) => +new Date(b.scheduledAt) - +new Date(a.scheduledAt))
+        )
+        
+        // Close form if editing
+        if (editingFollowUpId === followUpId) {
+          resetFollowUpForm()
+        }
+      } else {
+        // Re-fetch on failure to ensure consistency
+        await fetchFollowUps()
+      }
+    } catch (error: any) {
+      console.error('[FollowUp] Error updating follow-up:', error)
+      alert(error?.response?.data?.message || 'Failed to update follow-up.')
+      // Re-fetch on error
       await fetchFollowUps()
-    } catch (error) {
-      console.error('Failed to update follow-up:', error)
     } finally {
       setFollowUpLoading(false)
     }
@@ -902,10 +957,25 @@ export default function LeadDetail() {
 
     try {
       setFollowUpLoading(true)
-      await leadsAPI.deleteFollowUp(lead._id, followUpId)
+      
+      // Optimistically remove from UI first
+      const previousFollowUps = followUps
+      setFollowUps((current) => current.filter((f) => f._id !== followUpId))
+      
+      const response = await leadsAPI.deleteFollowUp(lead._id, followUpId)
+      
+      if (!response.success) {
+        // Restore on failure
+        setFollowUps(previousFollowUps)
+        alert('Failed to delete follow-up.')
+      }
+      // On success, item is already removed - fetch to ensure consistency
       await fetchFollowUps()
-    } catch (error) {
-      console.error('Failed to delete follow-up:', error)
+    } catch (error: any) {
+      console.error('[FollowUp] Error deleting follow-up:', error)
+      alert(error?.response?.data?.message || 'Failed to delete follow-up.')
+      // Re-fetch on error to restore correct state
+      await fetchFollowUps()
     } finally {
       setFollowUpLoading(false)
     }
