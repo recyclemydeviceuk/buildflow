@@ -1525,6 +1525,40 @@ export default function LeadDetail() {
             </div>
           </div>
 
+          {/* Website Form Submission Section — shown only for Website leads with raw form data */}
+          {lead.websiteFormData && Object.keys(lead.websiteFormData).length > 0 && (
+            <div className="bg-white rounded-lg border border-[#E2E8F0] p-3 shadow-sm">
+              <div className="flex items-center gap-2 mb-3 px-1">
+                <div className="w-1 h-3 bg-[#0EA5E9] rounded-full" />
+                <h2 className="text-xs font-bold text-[#0F172A]">Website Form Submission</h2>
+                <span className="ml-auto text-[9px] font-bold text-[#64748B] bg-[#F1F5F9] px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  {Object.keys(lead.websiteFormData).length} fields
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                {Object.entries(lead.websiteFormData).map(([key, value]) => {
+                  // Format the key into a readable label
+                  const label = key
+                    .replace(/_/g, ' ')
+                    .replace(/\b\w/g, (c) => c.toUpperCase())
+                  return (
+                    <div
+                      key={key}
+                      className="flex flex-col gap-0.5 p-2.5 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] hover:border-[#0EA5E9]/40 transition-colors"
+                    >
+                      <span className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider truncate">
+                        {label}
+                      </span>
+                      <span className="text-xs font-semibold text-[#0F172A] break-words leading-snug">
+                        {value || '—'}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Status Notes Section */}
           <div className="bg-white rounded-lg border border-[#E2E8F0] p-3 shadow-sm">
             <div className="flex flex-col gap-2 mb-3">

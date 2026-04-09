@@ -52,6 +52,8 @@ export interface Lead {
   tags: string[]
   notes?: string | null
   statusNotes?: LeadStatusNote[]
+  /** All raw form fields captured from the website submission (label → value) */
+  websiteFormData?: Record<string, string> | null
   createdAt: string
   updatedAt: string
 }
