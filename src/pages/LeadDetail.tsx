@@ -1525,39 +1525,138 @@ export default function LeadDetail() {
             </div>
           </div>
 
-          {/* Website Form Submission Section — shown only for Website leads with raw form data */}
-          {lead.websiteFormData && Object.keys(lead.websiteFormData).length > 0 && (
-            <div className="bg-white rounded-lg border border-[#E2E8F0] p-3 shadow-sm">
-              <div className="flex items-center gap-2 mb-3 px-1">
-                <div className="w-1 h-3 bg-[#0EA5E9] rounded-full" />
-                <h2 className="text-xs font-bold text-[#0F172A]">Website Form Submission</h2>
-                <span className="ml-auto text-[9px] font-bold text-[#64748B] bg-[#F1F5F9] px-2 py-0.5 rounded-full uppercase tracking-wider">
-                  {Object.keys(lead.websiteFormData).length} fields
-                </span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                {Object.entries(lead.websiteFormData).map(([key, value]) => {
-                  // Format the key into a readable label
-                  const label = key
-                    .replace(/_/g, ' ')
-                    .replace(/\b\w/g, (c) => c.toUpperCase())
-                  return (
-                    <div
-                      key={key}
-                      className="flex flex-col gap-0.5 p-2.5 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] hover:border-[#0EA5E9]/40 transition-colors"
-                    >
-                      <span className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider truncate">
-                        {label}
+          {/* ── Website Form Submission & Attribution ────────────────────────────── */}
+          {(() => {
+            // Keys that live in the Attribution panel, not the Form Data panel
+            const ATTRIBUTION_KEYS = new Set([
+              'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+              'gclid', 'gbraid', 'wbraid', 'landing_page', 'form_name', 'campaign',
+            ])
+            // Core identity keys — already prominent elsewhere on the page
+            const CORE_KEYS = new Set(['name', 'phone', 'email'])
+
+            // Form Data: every websiteFormData entry that isn't attribution or core
+            const formDataEntries = lead.websiteFormData
+              ? Object.entries(lead.websiteFormData).filter(
+                  ([k]) => !ATTRIBUTION_KEYS.has(k.toLowerCase()) && !CORE_KEYS.has(k.toLowerCase())
+                )
+              : []
+
+            // Attribution: merge dedicated lead model UTM fields with websiteFormData tracking keys
+            // Lead model fields take priority (they're the canonical stored value)
+            const fd = lead.websiteFormData ?? {}
+            const attributionRows: { label: string; value: string; mono?: boolean; url?: boolean }[] = [
+              { label: 'UTM Source',   value: lead.utmSource   || fd['utm_source']   || '' },
+              { label: 'UTM Medium',   value: lead.utmMedium   || fd['utm_medium']   || '' },
+              { label: 'UTM Campaign', value: lead.utmCampaign || fd['utm_campaign'] || '' },
+              { label: 'UTM Term',     value: lead.utmTerm     || fd['utm_term']     || '' },
+              { label: 'UTM Content',  value: lead.utmContent  || fd['utm_content']  || '' },
+              { label: 'Google Click ID (gclid)', value: lead.googleClickId || fd['gclid'] || '', mono: true },
+              { label: 'Google BRAID (gbraid)',   value: fd['gbraid'] || '', mono: true },
+              { label: 'Web BRAID (wbraid)',      value: fd['wbraid'] || '', mono: true },
+              { label: 'Landing Page', value: fd['landing_page'] || '', url: true },
+              { label: 'Form / Campaign', value: lead.campaign || fd['form_name'] || fd['campaign'] || '' },
+            ].filter(r => r.value)
+
+            const hasFormData    = formDataEntries.length > 0
+            const hasAttribution = attributionRows.length > 0
+            if (!hasFormData && !hasAttribution) return null
+
+            return (
+              <div className="bg-white rounded-lg border border-[#E2E8F0] shadow-sm overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#F1F5F9] bg-[#F8FAFC]">
+                  <div className="w-1 h-3 bg-[#0EA5E9] rounded-full" />
+                  <h2 className="text-xs font-bold text-[#0F172A]">Website Form Submission</h2>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    {hasFormData && (
+                      <span className="text-[9px] font-bold text-[#475569] bg-white border border-[#E2E8F0] px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        {formDataEntries.length} form fields
                       </span>
-                      <span className="text-xs font-semibold text-[#0F172A] break-words leading-snug">
-                        {value || '—'}
+                    )}
+                    {hasAttribution && (
+                      <span className="text-[9px] font-bold text-[#0369A1] bg-[#E0F2FE] border border-[#BAE6FD] px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        Attribution tracked
                       </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-3 grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-3 items-start">
+
+                  {/* ── Left: Form Data ───────────────────────────────────────────────── */}
+                  {hasFormData && (
+                    <div>
+                      <p className="text-[9px] font-bold text-[#94A3B8] uppercase tracking-widest mb-2 px-0.5">
+                        What the visitor submitted
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {formDataEntries.map(([key, value]) => {
+                          const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+                          return (
+                            <div
+                              key={key}
+                              className="flex flex-col gap-1 p-2.5 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] hover:border-[#0EA5E9]/50 transition-colors"
+                            >
+                              <span className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider leading-none">
+                                {label}
+                              </span>
+                              <span className="text-xs font-semibold text-[#0F172A] break-words leading-snug">
+                                {value}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
-                  )
-                })}
+                  )}
+
+                  {/* ── Right: Attribution & Tracking ────────────────────────────────── */}
+                  {hasAttribution && (
+                    <div className="rounded-lg border border-[#BAE6FD] bg-[#F0F9FF] p-2.5">
+                      <p className="text-[9px] font-bold text-[#0369A1] uppercase tracking-widest mb-2 px-0.5">
+                        Attribution &amp; Tracking
+                      </p>
+                      <div className="flex flex-col gap-1">
+                        {attributionRows.map(row => (
+                          <div
+                            key={row.label}
+                            className="flex items-start justify-between gap-3 px-2 py-1.5 rounded-md bg-white border border-[#E0F2FE] hover:border-[#0EA5E9] transition-colors"
+                          >
+                            <span className="text-[9px] font-bold text-[#0369A1] uppercase tracking-wider whitespace-nowrap shrink-0 pt-px">
+                              {row.label}
+                            </span>
+                            {row.url ? (
+                              <a
+                                href={row.value}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] font-semibold text-[#0EA5E9] hover:underline text-right break-all max-w-[180px] leading-snug"
+                                title={row.value}
+                              >
+                                {row.value.replace(/^https?:\/\//, '').slice(0, 48)}{row.value.length > 54 ? '…' : ''}
+                              </a>
+                            ) : (
+                              <span
+                                className={`text-right break-all max-w-[180px] leading-snug ${
+                                  row.mono
+                                    ? 'font-mono text-[9px] text-[#475569] select-all'
+                                    : 'text-[10px] font-semibold text-[#0F172A]'
+                                }`}
+                                title={row.value}
+                              >
+                                {row.value}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* Status Notes Section */}
           <div className="bg-white rounded-lg border border-[#E2E8F0] p-3 shadow-sm">

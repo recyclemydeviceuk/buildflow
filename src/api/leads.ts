@@ -52,6 +52,13 @@ export interface Lead {
   tags: string[]
   notes?: string | null
   statusNotes?: LeadStatusNote[]
+  // UTM / attribution tracking fields
+  utmSource?: string | null
+  utmMedium?: string | null
+  utmCampaign?: string | null
+  utmTerm?: string | null
+  utmContent?: string | null
+  googleClickId?: string | null
   /** All raw form fields captured from the website submission (label → value) */
   websiteFormData?: Record<string, string> | null
   createdAt: string
