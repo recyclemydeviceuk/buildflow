@@ -19,6 +19,7 @@ import AnalyticsConnected from './pages/AnalyticsConnected'
 import CallLog from './pages/CallLog'
 import Dialer from './pages/Dialer'
 import LeadImport from './pages/LeadImport'
+import EmiCalculator from './pages/EmiCalculator'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { SocketProvider } from './context/SocketContext'
 
@@ -69,6 +70,7 @@ function AppRoutes() {
           <Route path="dialer" element={<Dialer />} />
           <Route path="call-log" element={<CallLog />} />
           <Route path="lead-import" element={<LeadImport />} />
+          <Route path="emi-calculator" element={<EmiCalculator />} />
           <Route path="settings" element={<Settings role={role} />} />
           <Route path="*" element={<Navigate to={role === 'manager' ? '/dashboard' : '/agent'} replace />} />
         </Route>

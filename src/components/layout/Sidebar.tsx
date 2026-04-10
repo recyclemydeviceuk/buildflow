@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Bell, BarChart2,
-  FileText, Shield, Settings, Link2, BarChart3, Phone, LogOut, CalendarClock
+  FileText, Shield, Settings, Link2, BarChart3, Phone, LogOut, CalendarClock, Calculator
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { UserRole } from '../../App'
@@ -276,6 +276,28 @@ export default function Sidebar({ role }: SidebarProps) {
           )
         })}
       </nav>
+
+      {/* EMI Calculator shortcut */}
+      <div className="px-2 pb-1 border-t border-white/[0.06] pt-2">
+        <NavLink
+          to="/emi-calculator"
+          className={`group flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 relative ${
+            location.pathname === '/emi-calculator' ? 'text-white' : 'text-[#64748B] hover:text-[#94A3B8]'
+          }`}
+          style={location.pathname === '/emi-calculator' ? { background: 'rgba(255,255,255,0.08)' } : undefined}
+        >
+          {location.pathname === '/emi-calculator' && (
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-[#3B82F6] rounded-r-full" />
+          )}
+          <div
+            className="w-[18px] h-[18px] rounded-md flex items-center justify-center shrink-0"
+            style={{ background: location.pathname === '/emi-calculator' ? 'rgba(59,130,246,0.25)' : 'rgba(59,130,246,0.12)' }}
+          >
+            <Calculator size={11} className="text-[#3B82F6]" />
+          </div>
+          <span className="flex-1">EMI Calculator</span>
+        </NavLink>
+      </div>
 
       {/* Settings */}
       <div className="px-2 pb-1.5 border-t border-white/[0.06] pt-2">
