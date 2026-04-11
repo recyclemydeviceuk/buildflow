@@ -170,4 +170,9 @@ export const callsAPI = {
     const token = localStorage.getItem('token')
     return `${baseURL}/calls/${id}/recording${token ? `?token=${token}` : ''}`
   },
+
+  reconcileStatuses: async (): Promise<{ success: boolean; fixed: number }> => {
+    const response = await client.post('/calls/reconcile-statuses')
+    return response.data
+  },
 }

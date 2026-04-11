@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Search, MapPin, ChevronRight, ArrowUpDown, X, Plus, ChevronLeft, RefreshCw, Trash2, ToggleLeft, ToggleRight, Loader2, Download, User } from 'lucide-react'
 import { leadsAPI, type Lead } from '../api/leads'
 import type { LeadFieldConfig } from '../api/settings'
+import { callsAPI } from '../api/calls'
 import { teamAPI } from '../api/team'
 import FancyDropdown, { type FancyDropdownOption } from '../components/common/FancyDropdown'
 import BulkEditLeadsModal from '../components/leads/BulkEditLeadsModal'
@@ -170,6 +171,9 @@ export default function LeadList() {
     fetchFilters()
     if (user) {
       fetchTeam()
+      // Silently fix any reps whose "In Call" status was never cleared
+      // (e.g. Exotel webhook missed, server restarted mid-call)
+      callsAPI.reconcileStatuses().catch(() => {})
     }
   }, [user])
 
