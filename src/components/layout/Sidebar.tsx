@@ -209,14 +209,19 @@ export default function Sidebar({ role }: SidebarProps) {
     if (!user || resettingCallStatus) return
     try {
       setResettingCallStatus(true)
-      // Step 1: Directly set available + clear activeCallSid in DB for this user
-      await settingsAPI.updateMyProfile({ callAvailabilityStatus: 'available' })
-      // Step 2: Reconcile catches any residual activeCallSid not cleared by step 1
-      await callsAPI.reconcileStatuses()
-      // Step 3: Refresh local user state from DB so sidebar updates immediately
-      await refreshUser()
+      // Immediately clear local state so UI responds right away
+      updateUser({ callAvailabilityStatus: 'available', activeCallSid: null })
+      // Update DB — also clears activeCallSid on backend
+      const res = await settingsAPI.updateMyProfile({ callAvailabilityStatus: 'available' })
+      if (res.success) {
+        // Force activeCallSid null locally even if DB hasn't cleared it yet
+        updateUser({ ...res.data, activeCallSid: null })
+      }
+      // Reconcile is best-effort (non-blocking — route may not exist yet if server not restarted)
+      callsAPI.reconcileStatuses().catch(() => {})
     } catch (err) {
       console.error('Failed to reset call status:', err)
+      await refreshUser()
     } finally {
       setResettingCallStatus(false)
     }
@@ -347,7 +352,7 @@ export default function Sidebar({ role }: SidebarProps) {
                 disabled={resettingCallStatus}
                 className="w-full text-[9px] font-bold px-2 py-1 rounded-md bg-[#1e2d45] border border-[#F59E0B]/40 text-[#F59E0B] hover:bg-[#F59E0B]/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {resettingCallStatus ? 'Resetting...' : '⚡ Reset to Available'}
+                {resettingCallStatus ? 'Resetting...' : 'Reset to Available'}
               </button>
             )}
           </div>
