@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext'
 import { UserRole } from '../../App'
 import { remindersAPI } from '../../api/reminders'
 import { settingsAPI } from '../../api/settings'
+import { callsAPI } from '../../api/calls'
 import { useSocket } from '../../context/SocketContext'
 import { useFeatureControls } from '../../context/FeatureControlsContext'
 
@@ -61,6 +62,7 @@ export default function Sidebar({ role }: SidebarProps) {
   const { socket, connected } = useSocket()
   const featureControls = useFeatureControls()
   const [availabilityUpdating, setAvailabilityUpdating] = useState(false)
+  const [resettingCallStatus, setResettingCallStatus] = useState(false)
   const [reminderBadgeCount, setReminderBadgeCount] = useState(0)
   const navItems = (role === 'manager' ? managerNav : repNav).filter((item) => {
     if (item.path === '/dialer' && !featureControls.dialer) return false
@@ -203,6 +205,21 @@ export default function Sidebar({ role }: SidebarProps) {
     }
   }
 
+  const handleResetCallStatus = async () => {
+    if (!user || resettingCallStatus) return
+    try {
+      setResettingCallStatus(true)
+      // Force-reset this user's status to available in the DB
+      await settingsAPI.updateMyProfile({ callAvailabilityStatus: 'available' })
+      await callsAPI.reconcileStatuses()
+      await refreshUser()
+    } catch (err) {
+      console.error('Failed to reset call status:', err)
+    } finally {
+      setResettingCallStatus(false)
+    }
+  }
+
   const status = getDisplayAvailability(user)
   const sm = statusMeta[status]
 
@@ -322,6 +339,15 @@ export default function Sidebar({ role }: SidebarProps) {
               <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: sm.dot }} />
               <span className="text-[10px] font-semibold" style={{ color: sm.text }}>{sm.label}</span>
             </div>
+            {status === 'in-call' && (
+              <button
+                onClick={handleResetCallStatus}
+                disabled={resettingCallStatus}
+                className="w-full text-[9px] font-bold px-2 py-1 rounded-md bg-[#1e2d45] border border-[#F59E0B]/40 text-[#F59E0B] hover:bg-[#F59E0B]/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {resettingCallStatus ? 'Resetting...' : '⚡ Reset to Available'}
+              </button>
+            )}
           </div>
         )}
       </div>
