@@ -30,6 +30,16 @@ export interface FeatureControls {
   manualAssignment: boolean
   dialer: boolean
   callRecording: boolean
+  duplicateDetection: boolean
+  autoQueueing: boolean
+  smsEnabled: boolean
+  whatsappEnabled: boolean
+  followUpReminders: boolean
+  exportLeads: boolean
+  bulkEdit: boolean
+  auditLog: boolean
+  analyticsAccess: boolean
+  representativeCanDelete: boolean
 }
 
 export interface SettingsData {
@@ -46,6 +56,7 @@ export interface SettingsData {
     fields: LeadFieldConfig[]
   }
   cities: string[]
+  sources: string[]
   featureControls: FeatureControls
   notifications?: {
     reminderLeadTime: number
@@ -139,6 +150,11 @@ export const settingsAPI = {
 
   updateCities: async (cities: string[]) => {
     const response = await client.patch('/settings/cities', { cities })
+    return response.data
+  },
+
+  updateSources: async (sources: string[]) => {
+    const response = await client.patch('/settings/sources', { sources })
     return response.data
   },
 

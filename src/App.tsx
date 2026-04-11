@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/layout/Layout'
+import FeatureGuard from './components/layout/FeatureGuard'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import AgentDashboard from './pages/AgentDashboard'
@@ -22,6 +23,7 @@ import LeadImport from './pages/LeadImport'
 import EmiCalculator from './pages/EmiCalculator'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { SocketProvider } from './context/SocketContext'
+import { FeatureControlsProvider } from './context/FeatureControlsContext'
 
 export type UserRole = 'manager' | 'representative'
 
@@ -58,16 +60,69 @@ function AppRoutes() {
           <Route path="agent" element={role === 'representative' ? <AgentDashboard /> : <Navigate to="/dashboard" replace />} />
           <Route path="leads" element={<LeadList />} />
           <Route path="leads/:id" element={<LeadDetail />} />
-          <Route path="reminders" element={<ReminderCenter />} />
-          <Route path="follow-ups" element={<FollowUps />} />
-          <Route path="performance" element={role === 'manager' ? <TeamPerformance /> : <PerformanceDashboard />} />
-          {role === 'manager' && <Route path="performance/:id" element={<TeamPerformanceDetail />} />}
-          <Route path="my-performance" element={role === 'manager' ? <PerformanceDashboardConnected /> : <PerformanceDashboard />} />
-          <Route path="reports" element={<ReportsConnected />} />
-          {role === 'manager' && <Route path="audit" element={<AuditLogConnected />} />}
+
+          {/* Follow-up routes — gated by followUpReminders */}
+          <Route
+            path="reminders"
+            element={<FeatureGuard feature="followUpReminders"><ReminderCenter /></FeatureGuard>}
+          />
+          <Route
+            path="follow-ups"
+            element={<FeatureGuard feature="followUpReminders"><FollowUps /></FeatureGuard>}
+          />
+
+          {/* Performance / Analytics routes — gated by analyticsAccess */}
+          <Route
+            path="performance"
+            element={
+              <FeatureGuard feature="analyticsAccess">
+                {role === 'manager' ? <TeamPerformance /> : <PerformanceDashboard />}
+              </FeatureGuard>
+            }
+          />
+          {role === 'manager' && (
+            <Route
+              path="performance/:id"
+              element={<FeatureGuard feature="analyticsAccess"><TeamPerformanceDetail /></FeatureGuard>}
+            />
+          )}
+          <Route
+            path="my-performance"
+            element={
+              <FeatureGuard feature="analyticsAccess">
+                {role === 'manager' ? <PerformanceDashboardConnected /> : <PerformanceDashboard />}
+              </FeatureGuard>
+            }
+          />
+          <Route
+            path="reports"
+            element={<FeatureGuard feature="analyticsAccess"><ReportsConnected /></FeatureGuard>}
+          />
+
+          {/* Audit Log — manager only + gated by auditLog feature */}
+          {role === 'manager' && (
+            <Route
+              path="audit"
+              element={<FeatureGuard feature="auditLog"><AuditLogConnected /></FeatureGuard>}
+            />
+          )}
+
           {role === 'manager' && <Route path="integrations" element={<Integrations />} />}
-          {role === 'manager' && <Route path="analytics" element={<AnalyticsConnected />} />}
-          <Route path="dialer" element={<Dialer />} />
+
+          {/* Analytics — manager only + gated by analyticsAccess */}
+          {role === 'manager' && (
+            <Route
+              path="analytics"
+              element={<FeatureGuard feature="analyticsAccess"><AnalyticsConnected /></FeatureGuard>}
+            />
+          )}
+
+          {/* Dialer — gated by dialer feature */}
+          <Route
+            path="dialer"
+            element={<FeatureGuard feature="dialer"><Dialer /></FeatureGuard>}
+          />
+
           <Route path="call-log" element={<CallLog />} />
           <Route path="lead-import" element={<LeadImport />} />
           <Route path="emi-calculator" element={<EmiCalculator />} />
@@ -83,7 +138,9 @@ export default function App() {
   return (
     <AuthProvider>
       <SocketProvider>
-        <AppRoutes />
+        <FeatureControlsProvider>
+          <AppRoutes />
+        </FeatureControlsProvider>
       </SocketProvider>
     </AuthProvider>
   )

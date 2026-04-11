@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Phone, PhoneOff, PhoneCall, MapPin, Building2,
-  DollarSign, CheckCircle2, CheckCircle, Mic, ChevronDown, Edit3, User, Delete, Pencil, Trash2, X, History, MessageSquare, Clock, Calendar, ArrowUpRight, ArrowDownLeft, AlertCircle, Voicemail, Mail
+  IndianRupee, CheckCircle2, CheckCircle, Mic, ChevronDown, Edit3, User, Delete, Pencil, Trash2, X, History, MessageSquare, Clock, Calendar, ArrowUpRight, ArrowDownLeft, AlertCircle, Voicemail, Mail, Lock, Video, XCircle
 } from 'lucide-react'
 import { leadsAPI, type Lead, type Disposition, type LeadStatusNote, type FollowUp } from '../api/leads'
 import { callsAPI, type Call } from '../api/calls'
@@ -14,14 +14,9 @@ import CreatedAtEditor, { formatDateTimeLocalInput } from '../components/leads/C
 import CallReminderModal from '../components/reminders/CallReminderModal'
 import { useAuth } from '../context/AuthContext'
 import { useSocket } from '../context/SocketContext'
+import { useFeatureControls } from '../context/FeatureControlsContext'
 import { settingsAPI, type LeadFieldConfig } from '../api/settings'
 import { LEAD_FIELDS_STORAGE_KEY, LEAD_FIELDS_UPDATED_EVENT, normalizeLeadFieldConfigs } from '../utils/leadFields'
-import {
-  DEFAULT_FEATURE_CONTROLS,
-  FEATURE_CONTROLS_STORAGE_KEY,
-  FEATURE_CONTROLS_UPDATED_EVENT,
-  normalizeFeatureControls,
-} from '../utils/featureControls'
 
 type CallState = 'idle' | 'dialing' | 'connected' | 'completed'
 type MicState = 'idle' | 'checking' | 'ready' | 'blocked'
@@ -132,10 +127,11 @@ export default function LeadDetail() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { socket, connected } = useSocket()
-  const canAssignOwner = user?.role === 'manager' || user?.role === 'representative'
+  // Whether this user type ever needs the representative list (for picker & "Calling As" selector)
+  const isRepOrManager = user?.role === 'manager' || user?.role === 'representative'
   const [lead, setLead] = useState<Lead | null>(null)
   const [loading, setLoading] = useState(true)
-  const [featureControls, setFeatureControls] = useState(DEFAULT_FEATURE_CONTROLS)
+  const featureControls = useFeatureControls()
   const [calls, setCalls] = useState<Call[]>([])
   const [callState, setCallState] = useState<CallState>('idle')
   const [isStartingCall, setIsStartingCall] = useState(false)
@@ -147,6 +143,7 @@ export default function LeadDetail() {
   const [isUpdatingDisposition, setIsUpdatingDisposition] = useState(false)
   const [dispositionOptions, setDispositionOptions] = useState<string[]>(['New', 'Contacted/Open', 'Qualified', 'Visit Done', 'Meeting Done', 'Negotiation Done', 'Booking Done', 'Agreement Done', 'Failed'])
   const [cityOptions, setCityOptions] = useState<string[]>(['Ahmedabad', 'Gandhinagar', 'Vadodara', 'Surat', 'Rajkot'])
+  const [sourceOptions, setSourceOptions] = useState<string[]>(['Direct', 'Manual', 'Meta', 'Website', 'Google ADS'])
   const [buildTypeOptions, setBuildTypeOptions] = useState<string[]>(['Residential', 'Commercial', 'Villa', 'Apartment', 'Plot'])
   const [leadFields, setLeadFields] = useState<LeadFieldConfig[]>([])
   const [noteDraft, setNoteDraft] = useState('')
@@ -157,9 +154,23 @@ export default function LeadDetail() {
   const [showReminderForm, setShowReminderForm] = useState(false)
   const [plotSize, setPlotSize] = useState('')
   const [plotUnit, setPlotUnit] = useState('Sq Yard')
+  const [showStatusNoteModal, setShowStatusNoteModal] = useState(false)
+  const [modalNoteText, setModalNoteText] = useState('')
   const [meetingType, setMeetingType] = useState<'VC' | 'Client Place' | ''>('')
   const [meetingLocation, setMeetingLocation] = useState('')
   const [failedReason, setFailedReason] = useState('')
+  // Booking Done fields
+  const [bookingPackage, setBookingPackage] = useState('')
+  const [proposedProjectValue, setProposedProjectValue] = useState('')
+  const [bookingAmountCollected, setBookingAmountCollected] = useState('')
+  const [bookingDate, setBookingDate] = useState('')
+  const [numberOfFloors, setNumberOfFloors] = useState('')
+  const [assignedArchitect, setAssignedArchitect] = useState('')
+  // Agreement Done fields
+  const [agreementProjectValue, setAgreementProjectValue] = useState('')
+  const [agreementDate, setAgreementDate] = useState('')
+  const [agreementAmount, setAgreementAmount] = useState('')
+  const [totalCollection, setTotalCollection] = useState('')
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
   const [representatives, setRepresentatives] = useState<RepresentativePickerOption[]>([])
   const [selectedRepresentativeId, setSelectedRepresentativeId] = useState<string>('')
@@ -176,6 +187,8 @@ export default function LeadDetail() {
   const [followUpTime, setFollowUpTime] = useState('')
   const [followUpNotes, setFollowUpNotes] = useState('')
   const [followUpLoading, setFollowUpLoading] = useState(false)
+  const [sourceDropdownOpen, setSourceDropdownOpen] = useState(false)
+  const sourceDropdownRef = useRef<HTMLDivElement>(null)
   const syncIntervalRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -230,53 +243,18 @@ export default function LeadDetail() {
     }
   }, [activeCall?.exotelCallSid, activeCall?.status])
 
-  useEffect(() => {
-    settingsAPI
-      .getAppConfig()
-      .then((response) => {
-        if (response.success) {
-          setFeatureControls(normalizeFeatureControls(response.data.featureControls))
-        }
-      })
-      .catch((error) => {
-        console.error('Failed to load lead detail feature controls:', error)
-      })
-
-    const handleFeatureControlsUpdated = (event: Event) => {
-      const customEvent = event as CustomEvent
-      setFeatureControls(normalizeFeatureControls(customEvent.detail))
-    }
-
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key !== FEATURE_CONTROLS_STORAGE_KEY || !event.newValue) return
-
-      try {
-        const parsed = JSON.parse(event.newValue)
-        setFeatureControls(normalizeFeatureControls(parsed?.featureControls))
-      } catch (error) {
-        console.error('Failed to sync lead detail feature controls:', error)
-      }
-    }
-
-    window.addEventListener(FEATURE_CONTROLS_UPDATED_EVENT, handleFeatureControlsUpdated as EventListener)
-    window.addEventListener('storage', handleStorage)
-
-    return () => {
-      window.removeEventListener(FEATURE_CONTROLS_UPDATED_EVENT, handleFeatureControlsUpdated as EventListener)
-      window.removeEventListener('storage', handleStorage)
-    }
-  }, [])
+  // featureControls are now provided by FeatureControlsContext (loaded once app-wide)
 
   useEffect(() => {
     if (id) {
       fetchLeadData()
       fetchCallLogs()
       fetchFilters()
-      if (canAssignOwner) {
+      if (isRepOrManager) {
         fetchRepresentatives()
       }
     }
-  }, [id, canAssignOwner])
+  }, [id, isRepOrManager])
 
   useEffect(() => {
     if (lead?._id) {
@@ -305,7 +283,7 @@ export default function LeadDetail() {
   }, [])
 
   useEffect(() => {
-    if (!socket || !connected || !canAssignOwner) return
+    if (!socket || !connected || !isRepOrManager) return
 
     const handleAvailabilityUpdate = (payload: any) => {
       setRepresentatives((current) =>
@@ -327,7 +305,7 @@ export default function LeadDetail() {
     return () => {
       socket.off('user:availability_updated', handleAvailabilityUpdate)
     }
-  }, [socket, connected, canAssignOwner])
+  }, [socket, connected, isRepOrManager])
 
   const fetchLeadData = async () => {
     try {
@@ -342,6 +320,18 @@ export default function LeadDetail() {
         setMeetingType((res.data.meetingType as 'VC' | 'Client Place' | '') || '')
         setMeetingLocation(res.data.meetingLocation || '')
         setFailedReason(res.data.failedReason || '')
+        // Booking Done fields
+        setBookingPackage(res.data.bookingPackage || '')
+        setProposedProjectValue(res.data.proposedProjectValue || '')
+        setBookingAmountCollected(res.data.bookingAmountCollected || '')
+        setBookingDate(res.data.bookingDate ? res.data.bookingDate.split('T')[0] : '')
+        setNumberOfFloors(res.data.numberOfFloors || '')
+        setAssignedArchitect(res.data.assignedArchitect || '')
+        // Agreement Done fields
+        setAgreementProjectValue(res.data.agreementProjectValue || '')
+        setAgreementDate(res.data.agreementDate ? res.data.agreementDate.split('T')[0] : '')
+        setAgreementAmount(res.data.agreementAmount || '')
+        setTotalCollection(res.data.totalCollection || '')
         setEditableName(res.data.name || '')
         setEditablePhone(res.data.phone || '')
         setEditableCreatedAt(formatDateTimeLocalInput(res.data.createdAt))
@@ -387,6 +377,9 @@ export default function LeadDetail() {
         if (res.data.cities) {
           setCityOptions(res.data.cities.filter((c: string) => c !== 'All'))
         }
+        if (res.data.sources) {
+          setSourceOptions(res.data.sources.filter((s: string) => s !== 'All'))
+        }
         if (res.data.leadFields?.fields) {
           const normalizedFields = normalizeLeadFieldConfigs(res.data.leadFields.fields)
           setLeadFields(normalizedFields)
@@ -421,20 +414,9 @@ export default function LeadDetail() {
     }
   }
 
-  const handleUpdateDisposition = async () => {
+  const executeDispositionUpdate = async (noteToUse: string) => {
     const nextDisp = dispositionDraft
-    const note = dispositionNoteDraft.trim()
-
-    if (!lead || nextDisp === disposition) {
-      setDispositionNoteError('')
-      return
-    }
-
-    if (!note) {
-      setDispositionNoteError('Add a status note before changing the lead status.')
-      setSelectedNoteStatus(nextDisp)
-      return
-    }
+    if (!lead || nextDisp === disposition) return
 
     if (nextDisp === 'Meeting Done' && !meetingType) {
       setDispositionNoteError('Select Meeting Type (VC or Client Place) before saving.')
@@ -445,7 +427,7 @@ export default function LeadDetail() {
       setIsUpdatingDisposition(true)
       setDispositionNoteError('')
       setSelectedNoteStatus(nextDisp)
-      const res = await leadsAPI.updateDisposition(id!, nextDisp, note)
+      const res = await leadsAPI.updateDisposition(id!, nextDisp, noteToUse)
       if (res.success) {
         setLead(res.data)
         setDisposition(res.data.disposition)
@@ -460,6 +442,20 @@ export default function LeadDetail() {
         if (nextDisp === 'Failed') {
           extraFields.failedReason = failedReason.trim() || null
         }
+        if (nextDisp === 'Booking Done') {
+          extraFields.bookingPackage = bookingPackage.trim() || null
+          extraFields.proposedProjectValue = proposedProjectValue.trim() || null
+          extraFields.bookingAmountCollected = bookingAmountCollected.trim() || null
+          extraFields.bookingDate = bookingDate || null
+          extraFields.numberOfFloors = numberOfFloors.trim() || null
+          extraFields.assignedArchitect = assignedArchitect.trim() || null
+        }
+        if (nextDisp === 'Agreement Done') {
+          extraFields.agreementProjectValue = agreementProjectValue.trim() || null
+          extraFields.agreementDate = agreementDate || null
+          extraFields.agreementAmount = agreementAmount.trim() || null
+          extraFields.totalCollection = totalCollection.trim() || null
+        }
         if (Object.keys(extraFields).length > 0) {
           const updRes = await leadsAPI.updateLead(id!, extraFields)
           if (updRes.success) {
@@ -467,6 +463,16 @@ export default function LeadDetail() {
             setMeetingType((updRes.data.meetingType as 'VC' | 'Client Place' | '') || '')
             setMeetingLocation(updRes.data.meetingLocation || '')
             setFailedReason(updRes.data.failedReason || '')
+            setBookingPackage(updRes.data.bookingPackage || '')
+            setProposedProjectValue(updRes.data.proposedProjectValue || '')
+            setBookingAmountCollected(updRes.data.bookingAmountCollected || '')
+            setBookingDate(updRes.data.bookingDate ? updRes.data.bookingDate.split('T')[0] : '')
+            setNumberOfFloors(updRes.data.numberOfFloors || '')
+            setAssignedArchitect(updRes.data.assignedArchitect || '')
+            setAgreementProjectValue(updRes.data.agreementProjectValue || '')
+            setAgreementDate(updRes.data.agreementDate ? updRes.data.agreementDate.split('T')[0] : '')
+            setAgreementAmount(updRes.data.agreementAmount || '')
+            setTotalCollection(updRes.data.totalCollection || '')
           }
         }
       }
@@ -479,7 +485,41 @@ export default function LeadDetail() {
     }
   }
 
+  const handleUpdateDisposition = () => {
+    if (!isLeadOwner) return
+    if (!lead || dispositionDraft === disposition) return
+    const note = dispositionNoteDraft.trim()
+    if (!note) {
+      // Open modal to collect the note
+      setModalNoteText('')
+      setShowStatusNoteModal(true)
+      return
+    }
+    void executeDispositionUpdate(note)
+  }
+
+  const handleConfirmModalNote = () => {
+    const note = modalNoteText.trim()
+    if (!note) return
+    setDispositionNoteDraft(note)
+    setShowStatusNoteModal(false)
+    setModalNoteText('')
+    void executeDispositionUpdate(note)
+  }
+
+  useEffect(() => {
+    if (!sourceDropdownOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sourceDropdownRef.current && !sourceDropdownRef.current.contains(e.target as Node)) {
+        setSourceDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [sourceDropdownOpen])
+
   const handleSaveQualification = async (field: string, value: any) => {
+    if (!isLeadOwner) return // Non-owners cannot edit
     try {
       const res = await leadsAPI.updateLead(id!, { [field]: value })
       if (res.success) {
@@ -552,6 +592,7 @@ export default function LeadDetail() {
   }
 
   const saveStatusNote = async () => {
+    if (!isLeadOwner) return // Non-owners cannot add or edit notes
     const nextNote = noteDraft.trim()
     const targetStatus = selectedNoteStatus || disposition || lead?.disposition
 
@@ -741,6 +782,9 @@ export default function LeadDetail() {
   )
   const contactNameField = activeLeadFields.find((field) => field.key === 'name')
   const phoneField = activeLeadFields.find((field) => field.key === 'phone')
+  const budgetField = activeLeadFields.find((field) => field.key === 'budget')
+  const buildTypeField = activeLeadFields.find((field) => field.key === 'buildType')
+  const plotOwnedField = activeLeadFields.find((field) => field.key === 'plotOwned')
   const plotSizeField = activeLeadFields.find((field) => field.key === 'plotSize')
   const plotSizeUnitField = activeLeadFields.find((field) => field.key === 'plotSizeUnit')
   const qualificationFields = activeLeadFields.filter(
@@ -756,6 +800,11 @@ export default function LeadDetail() {
     [calls]
   )
   const latestReminderCall = activeCall || sortedCallHistory[0] || null
+
+  // Ownership gate: managers have full access; reps only if they are the current lead owner.
+  // Non-owners can VIEW the lead but cannot edit, transfer, or manage follow-ups.
+  // Defined before the loading guard so handlers (defined above) can reference it safely.
+  const isLeadOwner = user?.role === 'manager' || Boolean(lead?.owner && String(lead.owner) === String(user?.id))
 
   if (loading || !lead) {
     return (
@@ -1019,7 +1068,7 @@ export default function LeadDetail() {
       <div className="flex gap-0">
         {/* Left — primary work area */}
         <div className="flex-1 p-3 space-y-3">
-          {user?.role === 'manager' ? (
+          {(user?.role === 'manager' || (isLeadOwner && featureControls.representativeCanDelete)) ? (
             <div className="flex justify-end">
               <button
                 type="button"
@@ -1033,24 +1082,79 @@ export default function LeadDetail() {
             </div>
           ) : null}
 
-          {/* Top Attribute Cards */}
+          {/* View-Only banner — shown when rep is not the lead owner */}
+          {!isLeadOwner && user?.role === 'representative' && (
+            <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-[#FED7AA] bg-[#FFF7ED]">
+              <div className="w-5 h-5 rounded-full bg-[#F97316] flex items-center justify-center shrink-0">
+                <User size={11} className="text-white" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-[#92400E]">View Only — You are not the owner of this lead</p>
+                <p className="text-[10px] text-[#B45309] mt-0.5">Editing, transferring, and follow-up management are restricted to the lead owner ({lead.ownerName || 'the assigned representative'}).</p>
+              </div>
+            </div>
+          )}
+
+          {/* Top Attribute Cards — config-driven, respect Settings active state & labels */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-            {[
-              { label: 'Budget', value: lead.budget || '—', icon: DollarSign, color: '#16A34A' },
-              { label: 'Build', value: lead.buildType || '—', icon: Building2, color: '#7C3AED' },
-              { label: 'Plot', value: lead.plotOwned ? 'Owned' : 'Not Owned', icon: CheckCircle2, color: lead.plotOwned ? '#16A34A' : '#94A3B8' },
-              { label: 'Source', value: lead.source || '—', icon: Phone, color: '#1D4ED8' },
-            ].map((item) => (
-              <div key={item.label} className="group flex flex-col gap-1 p-2 rounded-lg bg-white border border-[#E2E8F0] hover:border-[#1D4ED8] hover:shadow-sm transition-all duration-300">
+            {(
+              [
+                budgetField ? { key: 'budget', label: budgetField.label, value: lead.budget || '—', Icon: IndianRupee, color: '#16A34A' } : null,
+                buildTypeField ? { key: 'buildType', label: buildTypeField.label, value: lead.buildType || '—', Icon: Building2, color: '#7C3AED' } : null,
+                plotOwnedField ? { key: 'plotOwned', label: plotOwnedField.label, value: lead.plotOwned ? 'Owned' : 'Not Owned', Icon: CheckCircle2, color: lead.plotOwned ? '#16A34A' : '#94A3B8' } : null,
+              ] as const
+            ).filter((item): item is NonNullable<typeof item> => item !== null).map(({ key, label, value, Icon, color }) => (
+              <div key={key} className="group flex flex-col gap-1 p-2 rounded-lg bg-white border border-[#E2E8F0] hover:border-[#1D4ED8] hover:shadow-sm transition-all duration-300">
                 <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider">{item.label}</span>
-                  <div className="p-1 rounded-md group-hover:scale-110 transition-transform" style={{ background: `${item.color}10` }}>
-                    <item.icon size={10} style={{ color: item.color }} />
+                  <span className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider">{label}</span>
+                  <div className="p-1 rounded-md group-hover:scale-110 transition-transform" style={{ background: `${color}10` }}>
+                    <Icon size={10} style={{ color }} />
                   </div>
                 </div>
-                <p className="text-sm font-bold text-[#0F172A] tracking-tight truncate">{item.value}</p>
+                <p className="text-sm font-bold text-[#0F172A] tracking-tight truncate">{value}</p>
               </div>
             ))}
+            {/* Source card — editable dropdown for lead owners, static for observers */}
+            <div
+              ref={sourceDropdownRef}
+              onClick={() => isLeadOwner && setSourceDropdownOpen((o) => !o)}
+              className={`relative group flex flex-col gap-1 p-2 rounded-lg bg-white border border-[#E2E8F0] transition-all duration-300 ${isLeadOwner ? 'hover:border-[#1D4ED8] hover:shadow-sm cursor-pointer select-none' : 'cursor-default'}`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider">Source</span>
+                <div className="p-1 rounded-md group-hover:scale-110 transition-transform" style={{ background: '#1D4ED810' }}>
+                  <Phone size={10} style={{ color: '#1D4ED8' }} />
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-sm font-bold text-[#0F172A] tracking-tight truncate">{lead.source || '—'}</span>
+                {isLeadOwner && <ChevronDown size={11} className={`shrink-0 text-[#94A3B8] transition-transform duration-200 ${sourceDropdownOpen ? 'rotate-180' : ''}`} />}
+              </div>
+              {isLeadOwner && sourceDropdownOpen && (
+                <div
+                  className="absolute left-0 top-full mt-1.5 z-30 w-44 rounded-xl border border-[#E2E8F0] bg-white shadow-xl overflow-hidden"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {sourceOptions.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => {
+                        void handleSaveQualification('source', s)
+                        setSourceDropdownOpen(false)
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs font-semibold transition-colors ${
+                        lead.source === s
+                          ? 'bg-[#EFF6FF] text-[#1D4ED8]'
+                          : 'text-[#0F172A] hover:bg-[#F8FAFC]'
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Lead Overview & Detailed Qualification Merged */}
@@ -1074,8 +1178,10 @@ export default function LeadDetail() {
                         </div>
                         <input
                           value={editableName}
-                          onChange={(e) => setEditableName(e.target.value)}
+                          readOnly={!isLeadOwner}
+                          onChange={(e) => isLeadOwner && setEditableName(e.target.value)}
                           onBlur={(e) => {
+                            if (!isLeadOwner) return
                             const nextName = e.target.value.trim()
                             if (nextName && nextName !== lead.name) {
                               handleSaveQualification('name', nextName)
@@ -1084,30 +1190,10 @@ export default function LeadDetail() {
                             }
                           }}
                           placeholder={contactNameField?.placeholder || 'Customer name'}
-                          className="w-full pl-9 pr-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm leading-tight text-[#0F172A] font-semibold focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/10 focus:border-[#1D4ED8] focus:bg-white transition-all"
+                          className={`w-full pl-9 pr-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm leading-tight text-[#0F172A] font-semibold focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/10 focus:border-[#1D4ED8] focus:bg-white transition-all ${!isLeadOwner ? 'cursor-default' : ''}`}
                         />
                       </div>
 
-                      <div className="mt-3">
-                        <CreatedAtEditor
-                          key={createdAtEditorKey}
-                          value={editableCreatedAt}
-                          onChange={setEditableCreatedAt}
-                          label="Created At"
-                          helperText=""
-                          description="Set the lead's original created date, time, and year with a clean local editor."
-                        />
-                        <div className="mt-2 flex items-center justify-end gap-2 px-1">
-                          <button
-                            type="button"
-                            onClick={() => void saveCreatedAt()}
-                            disabled={!editableCreatedAt || editableCreatedAt === formatDateTimeLocalInput(lead.createdAt)}
-                            className="px-2.5 py-1 rounded-md bg-[#0F172A] text-white text-[9px] font-bold hover:bg-[#1E293B] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            Save
-                          </button>
-                        </div>
-                      </div>
                     </div>
                     <div>
                       <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">Lead Status</label>
@@ -1115,52 +1201,68 @@ export default function LeadDetail() {
                         <div className="relative group">
                           <select
                             value={dispositionDraft}
+                            disabled={!isLeadOwner}
                             onChange={(e) => {
                               setDispositionDraft(e.target.value)
                               setSelectedNoteStatus(e.target.value)
                               setDispositionNoteError('')
                             }}
-                            className="w-full appearance-none pl-3 pr-8 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs font-semibold text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all cursor-pointer"
+                            className="w-full appearance-none pl-3 pr-8 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs font-semibold text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                           >
                             {dispositionOptions.map(d => <option key={d} value={d}>{d}</option>)}
                           </select>
                           <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] group-hover:text-[#1D4ED8] transition-colors pointer-events-none" />
                         </div>
                         {/* Meeting Done sub-options */}
-                        {dispositionDraft === 'Meeting Done' && (
-                          <div className="space-y-2">
-                            <div>
-                              <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">Meeting Type <span className="text-[#DC2626]">*</span></label>
-                              <div className="flex gap-2">
-                                {(['VC', 'Client Place'] as const).map((type) => (
-                                  <button
-                                    key={type}
-                                    type="button"
-                                    onClick={() => { setMeetingType(type); if (dispositionNoteError) setDispositionNoteError('') }}
-                                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
-                                      meetingType === type
-                                        ? 'bg-[#7C3AED] border-[#7C3AED] text-white shadow-md'
-                                        : 'bg-[#F8FAFC] border-[#E2E8F0] text-[#475569] hover:border-[#7C3AED] hover:text-[#7C3AED]'
-                                    }`}
-                                  >
-                                    {type}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                            {meetingType === 'Client Place' && (
+                        {dispositionDraft === 'Meeting Done' && (() => {
+                          const isMeetingLocked = user?.role === 'representative' && disposition === 'Meeting Done'
+                          return (
+                            <div className="space-y-2">
+                              {isMeetingLocked && (
+                                <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#FFF7ED] border border-[#FED7AA] rounded-lg">
+                                  <Lock size={11} className="text-[#EA580C] shrink-0" />
+                                  <span className="text-[10px] font-semibold text-[#EA580C]">Meeting details can only be changed by a manager</span>
+                                </div>
+                              )}
                               <div>
-                                <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">Client Location</label>
-                                <input
-                                  value={meetingLocation}
-                                  onChange={(e) => setMeetingLocation(e.target.value)}
-                                  placeholder="Enter client address or Google Maps link..."
-                                  className="w-full px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/10 focus:border-[#7C3AED] focus:bg-white transition-all"
-                                />
+                                <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">
+                                  Meeting Type {!isMeetingLocked && <span className="text-[#DC2626]">*</span>}
+                                </label>
+                                <div className="flex gap-2">
+                                  {(['VC', 'Client Place'] as const).map((type) => (
+                                    <button
+                                      key={type}
+                                      type="button"
+                                      disabled={isMeetingLocked}
+                                      onClick={() => { if (!isMeetingLocked) { setMeetingType(type); if (dispositionNoteError) setDispositionNoteError('') } }}
+                                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
+                                        meetingType === type
+                                          ? 'bg-[#7C3AED] border-[#7C3AED] text-white shadow-md'
+                                          : isMeetingLocked
+                                            ? 'bg-[#F1F5F9] border-[#E2E8F0] text-[#94A3B8] cursor-not-allowed'
+                                            : 'bg-[#F8FAFC] border-[#E2E8F0] text-[#475569] hover:border-[#7C3AED] hover:text-[#7C3AED]'
+                                      }`}
+                                    >
+                                      {type}
+                                    </button>
+                                  ))}
+                                </div>
                               </div>
-                            )}
-                          </div>
-                        )}
+                              {meetingType === 'Client Place' && (
+                                <div>
+                                  <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">Client Location</label>
+                                  <input
+                                    value={meetingLocation}
+                                    readOnly={isMeetingLocked}
+                                    onChange={(e) => !isMeetingLocked && setMeetingLocation(e.target.value)}
+                                    placeholder="Enter client address or Google Maps link..."
+                                    className={`w-full px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/10 focus:border-[#7C3AED] focus:bg-white transition-all ${isMeetingLocked ? 'cursor-default opacity-70' : ''}`}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
 
                         {/* Failed sub-reason */}
                         {dispositionDraft === 'Failed' && (
@@ -1182,17 +1284,123 @@ export default function LeadDetail() {
                           </div>
                         )}
 
+                        {/* Booking Done sub-fields */}
+                        {dispositionDraft === 'Booking Done' && (
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">Package Selected</label>
+                                <input
+                                  value={bookingPackage}
+                                  onChange={(e) => setBookingPackage(e.target.value)}
+                                  placeholder="e.g. Premium, Standard..."
+                                  className="w-full px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#059669]/10 focus:border-[#059669] focus:bg-white transition-all"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">Proposed Project Value</label>
+                                <input
+                                  value={proposedProjectValue}
+                                  onChange={(e) => setProposedProjectValue(e.target.value)}
+                                  placeholder="e.g. ₹45,00,000"
+                                  className="w-full px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#059669]/10 focus:border-[#059669] focus:bg-white transition-all"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">Booking Amount Collected</label>
+                                <input
+                                  value={bookingAmountCollected}
+                                  onChange={(e) => setBookingAmountCollected(e.target.value)}
+                                  placeholder="e.g. ₹2,00,000"
+                                  className="w-full px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#059669]/10 focus:border-[#059669] focus:bg-white transition-all"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">Booking Date</label>
+                                <input
+                                  type="date"
+                                  value={bookingDate}
+                                  onChange={(e) => setBookingDate(e.target.value)}
+                                  className="w-full px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#059669]/10 focus:border-[#059669] focus:bg-white transition-all"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">No. of Floors</label>
+                                <input
+                                  value={numberOfFloors}
+                                  onChange={(e) => setNumberOfFloors(e.target.value)}
+                                  placeholder="e.g. G+2"
+                                  className="w-full px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#059669]/10 focus:border-[#059669] focus:bg-white transition-all"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">Assigned Architect</label>
+                                <input
+                                  value={assignedArchitect}
+                                  onChange={(e) => setAssignedArchitect(e.target.value)}
+                                  placeholder="Architect name..."
+                                  className="w-full px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#059669]/10 focus:border-[#059669] focus:bg-white transition-all"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Agreement Done sub-fields */}
+                        {dispositionDraft === 'Agreement Done' && (
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">Project Value as per Agreement</label>
+                                <input
+                                  value={agreementProjectValue}
+                                  onChange={(e) => setAgreementProjectValue(e.target.value)}
+                                  placeholder="e.g. ₹48,00,000"
+                                  className="w-full px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/10 focus:border-[#1D4ED8] focus:bg-white transition-all"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">Agreement Date</label>
+                                <input
+                                  type="date"
+                                  value={agreementDate}
+                                  onChange={(e) => setAgreementDate(e.target.value)}
+                                  className="w-full px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/10 focus:border-[#1D4ED8] focus:bg-white transition-all"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">Agreement Amount</label>
+                                <input
+                                  value={agreementAmount}
+                                  onChange={(e) => setAgreementAmount(e.target.value)}
+                                  placeholder="e.g. ₹5,00,000"
+                                  className="w-full px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/10 focus:border-[#1D4ED8] focus:bg-white transition-all"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">Total Collection Till Date</label>
+                                <input
+                                  value={totalCollection}
+                                  onChange={(e) => setTotalCollection(e.target.value)}
+                                  placeholder="e.g. ₹10,00,000"
+                                  className="w-full px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/10 focus:border-[#1D4ED8] focus:bg-white transition-all"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Show existing meeting/failed info when viewing */}
                         {dispositionDraft === disposition && disposition === 'Meeting Done' && (lead.meetingType || lead.meetingLocation) && (
                           <div className="flex flex-wrap gap-2">
                             {lead.meetingType && (
                               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F5F3FF] border border-[#DDD6FE] text-[#7C3AED] text-xs font-bold">
-                                📅 {lead.meetingType}
+                                <Video size={11} className="shrink-0" /> {lead.meetingType}
                               </span>
                             )}
                             {lead.meetingLocation && (
                               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F5F3FF] border border-[#DDD6FE] text-[#7C3AED] text-xs font-medium max-w-full truncate">
-                                📍 {lead.meetingLocation}
+                                <MapPin size={11} className="shrink-0" /> {lead.meetingLocation}
                               </span>
                             )}
                           </div>
@@ -1201,39 +1409,102 @@ export default function LeadDetail() {
                         {dispositionDraft === disposition && disposition === 'Failed' && lead.failedReason && (
                           <div>
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#FEF2F2] border border-[#FCA5A5] text-[#DC2626] text-xs font-bold">
-                              ❌ {lead.failedReason}
+                              <XCircle size={11} className="shrink-0" /> {lead.failedReason}
                             </span>
                           </div>
                         )}
 
-                        <textarea
-                          value={dispositionNoteDraft}
-                          onChange={(e) => {
-                            setDispositionNoteDraft(e.target.value)
-                            if (dispositionNoteError) setDispositionNoteError('')
-                          }}
-                          rows={2}
-                          placeholder={dispositionDraft === disposition ? 'Add note if you plan to change the status...' : `Add a required note for ${dispositionDraft}...`}
-                          className={`w-full px-3 py-1.5 bg-[#F8FAFC] border rounded-lg text-xs text-[#0F172A] resize-none focus:outline-none focus:ring-2 transition-all ${
-                            dispositionNoteError
-                              ? 'border-[#FCA5A5] focus:ring-red-100 focus:border-[#DC2626]'
-                              : 'border-[#E2E8F0] focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8]'
-                          }`}
-                        />
+                        {/* Show existing Booking Done info when viewing */}
+                        {dispositionDraft === disposition && disposition === 'Booking Done' && (
+                          lead.bookingPackage || lead.proposedProjectValue || lead.bookingAmountCollected ||
+                          lead.bookingDate || lead.numberOfFloors || lead.assignedArchitect
+                        ) && (
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 p-2.5 bg-[#F0FDF4] border border-[#BBF7D0] rounded-lg">
+                            {lead.bookingPackage && (
+                              <div>
+                                <span className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider block">Package</span>
+                                <span className="text-xs font-semibold text-[#166534]">{lead.bookingPackage}</span>
+                              </div>
+                            )}
+                            {lead.proposedProjectValue && (
+                              <div>
+                                <span className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider block">Project Value</span>
+                                <span className="text-xs font-semibold text-[#166534]">{lead.proposedProjectValue}</span>
+                              </div>
+                            )}
+                            {lead.bookingAmountCollected && (
+                              <div>
+                                <span className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider block">Booking Amount</span>
+                                <span className="text-xs font-semibold text-[#166534]">{lead.bookingAmountCollected}</span>
+                              </div>
+                            )}
+                            {lead.bookingDate && (
+                              <div>
+                                <span className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider block">Booking Date</span>
+                                <span className="text-xs font-semibold text-[#166534]">{new Date(lead.bookingDate).toLocaleDateString('en-IN')}</span>
+                              </div>
+                            )}
+                            {lead.numberOfFloors && (
+                              <div>
+                                <span className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider block">No. of Floors</span>
+                                <span className="text-xs font-semibold text-[#166534]">{lead.numberOfFloors}</span>
+                              </div>
+                            )}
+                            {lead.assignedArchitect && (
+                              <div>
+                                <span className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider block">Architect</span>
+                                <span className="text-xs font-semibold text-[#166534]">{lead.assignedArchitect}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Show existing Agreement Done info when viewing */}
+                        {dispositionDraft === disposition && disposition === 'Agreement Done' && (
+                          lead.agreementProjectValue || lead.agreementDate || lead.agreementAmount || lead.totalCollection
+                        ) && (
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 p-2.5 bg-[#EFF6FF] border border-[#BFDBFE] rounded-lg">
+                            {lead.agreementProjectValue && (
+                              <div>
+                                <span className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider block">Agreement Value</span>
+                                <span className="text-xs font-semibold text-[#1e40af]">{lead.agreementProjectValue}</span>
+                              </div>
+                            )}
+                            {lead.agreementDate && (
+                              <div>
+                                <span className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider block">Agreement Date</span>
+                                <span className="text-xs font-semibold text-[#1e40af]">{new Date(lead.agreementDate).toLocaleDateString('en-IN')}</span>
+                              </div>
+                            )}
+                            {lead.agreementAmount && (
+                              <div>
+                                <span className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider block">Agreement Amount</span>
+                                <span className="text-xs font-semibold text-[#1e40af]">{lead.agreementAmount}</span>
+                              </div>
+                            )}
+                            {lead.totalCollection && (
+                              <div>
+                                <span className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider block">Total Collection</span>
+                                <span className="text-xs font-semibold text-[#1e40af]">{lead.totalCollection}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         <div className="flex items-center justify-between gap-3">
-                          <p className={`text-[10px] ${dispositionNoteError ? 'text-[#DC2626] font-semibold' : 'text-[#64748B]'}`}>
-                            {dispositionNoteError || (dispositionDraft === disposition
-                              ? 'Changing the lead status requires a note.'
-                              : 'Status change will only save together with this note.')}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={handleUpdateDisposition}
-                            disabled={isUpdatingDisposition || dispositionDraft === disposition || !dispositionNoteDraft.trim()}
-                            className="shrink-0 px-3 py-1.5 rounded-lg bg-[#1D4ED8] text-white text-[10px] font-bold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {isUpdatingDisposition ? 'Updating...' : 'Update Status'}
-                          </button>
+                          {dispositionNoteError && (
+                            <p className="text-[10px] text-[#DC2626] font-semibold">{dispositionNoteError}</p>
+                          )}
+                          <div className="ml-auto">
+                            <button
+                              type="button"
+                              onClick={handleUpdateDisposition}
+                              disabled={!isLeadOwner || isUpdatingDisposition || dispositionDraft === disposition}
+                              className="shrink-0 px-3 py-1.5 rounded-lg bg-[#1D4ED8] text-white text-[10px] font-bold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isUpdatingDisposition ? 'Updating...' : 'Update Status'}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1252,7 +1523,7 @@ export default function LeadDetail() {
                         field.key === 'city'
                           ? MapPin
                           : field.key === 'budget'
-                            ? DollarSign
+                            ? IndianRupee
                             : field.key === 'buildType'
                               ? Building2
                               : field.key === 'plotOwned'
@@ -1300,12 +1571,13 @@ export default function LeadDetail() {
                               <div className="relative">
                                 <select
                                   value={fieldValue || ''}
+                                  disabled={!isLeadOwner}
                                   onChange={(e) => {
                                     const nextValue =
                                       field.key === 'plotOwned' ? e.target.value === 'Yes' : e.target.value
                                     handleSaveQualification(field.key, nextValue)
                                   }}
-                                  className="w-full pl-8 pr-7 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] font-medium focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all appearance-none cursor-pointer"
+                                  className="w-full pl-8 pr-7 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] font-medium focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
                                   <option value="">{field.placeholder || 'Select...'}</option>
                                   {fieldOptions.map((option) => (
@@ -1321,7 +1593,9 @@ export default function LeadDetail() {
                                 key={`${field.key}-${fieldValue ?? ''}`}
                                 type={field.type === 'email' ? 'email' : field.type === 'number' ? 'number' : 'text'}
                                 defaultValue={fieldValue || ''}
+                                readOnly={!isLeadOwner}
                                 onBlur={(e) => {
+                                  if (!isLeadOwner) return
                                   const nextValue =
                                     field.type === 'number'
                                       ? e.target.value
@@ -1331,7 +1605,7 @@ export default function LeadDetail() {
                                   handleSaveQualification(field.key, nextValue)
                                 }}
                                 placeholder={field.placeholder || ''}
-                                className="w-full pl-8 pr-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] font-medium focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all"
+                                className={`w-full pl-8 pr-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] font-medium focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all ${!isLeadOwner ? 'cursor-default' : ''}`}
                               />
                             )}
                           </div>
@@ -1350,10 +1624,11 @@ export default function LeadDetail() {
                             <input
                               type="text"
                               value={plotSize}
-                              onChange={(e) => setPlotSize(e.target.value)}
-                              onBlur={(e) => handleSaveQualification('plotSize', e.target.value || null)}
+                              readOnly={!isLeadOwner}
+                              onChange={(e) => isLeadOwner && setPlotSize(e.target.value)}
+                              onBlur={(e) => isLeadOwner && handleSaveQualification('plotSize', e.target.value || null)}
                               placeholder={plotSizeField.placeholder || 'Size...'}
-                              className="flex-1 px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] font-medium focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all"
+                              className={`flex-1 px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] font-medium focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all ${!isLeadOwner ? 'cursor-default' : ''}`}
                             />
                           ) : (
                             <div className="flex-1" />
@@ -1362,11 +1637,13 @@ export default function LeadDetail() {
                             <div className="relative w-28">
                               <select
                                 value={plotUnit}
+                                disabled={!isLeadOwner}
                                 onChange={(e) => {
+                                  if (!isLeadOwner) return
                                   setPlotUnit(e.target.value)
                                   handleSaveQualification('plotSizeUnit', e.target.value)
                                 }}
-                                className="w-full appearance-none px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs font-medium text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all cursor-pointer"
+                                className="w-full appearance-none px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs font-medium text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                               >
                                 {(plotSizeUnitField.options || []).map((unit) => (
                                   <option key={unit} value={unit}>{unit}</option>
@@ -1381,7 +1658,7 @@ export default function LeadDetail() {
 
                     <div>
                       <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">Assigned To</label>
-                      {canAssignOwner ? (
+                      {isLeadOwner ? (
                         <RepresentativePicker
                           value={lead.owner ? String(lead.owner) : null}
                           onChange={(nextValue) => handleAssignLead(nextValue)}
@@ -1406,13 +1683,15 @@ export default function LeadDetail() {
               <div className="flex flex-col rounded-lg border border-[#E2E8F0] bg-white p-2 shadow-sm">
                 <div className="flex items-center justify-between mb-2 px-1">
                   <h3 className="text-[11px] font-bold text-[#0F172A]">Dialer</h3>
-                  <button
-                    onClick={savePhoneNumber}
-                    disabled={!editablePhone.trim() || editablePhone.trim() === (lead.phone || '').trim()}
-                    className="px-2.5 py-1 rounded-md bg-[#0F172A] text-white text-[9px] font-bold hover:bg-[#1E293B] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Save
-                  </button>
+                  {isLeadOwner && (
+                    <button
+                      onClick={savePhoneNumber}
+                      disabled={!editablePhone.trim() || editablePhone.trim() === (lead.phone || '').trim()}
+                      className="px-2.5 py-1 rounded-md bg-[#0F172A] text-white text-[9px] font-bold hover:bg-[#1E293B] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Save
+                    </button>
+                  )}
                 </div>
 
                 {/* Representative Selector for Managers */}
@@ -1742,13 +2021,16 @@ export default function LeadDetail() {
                 <div className="relative group">
                   <textarea
                     value={noteDraft}
-                    onChange={(e) => setNoteDraft(e.target.value)}
-                    placeholder={`What happened in ${activeNoteStatus} stage?`}
+                    readOnly={!isLeadOwner}
+                    onChange={(e) => isLeadOwner && setNoteDraft(e.target.value)}
+                    placeholder={isLeadOwner ? `What happened in ${activeNoteStatus} stage?` : 'Only the lead owner can add notes.'}
                     rows={6}
                     className={`w-full px-4 py-4 border rounded-2xl text-sm text-[#0F172A] placeholder-[#94A3B8] resize-none focus:outline-none focus:ring-4 transition-all shadow-inner ${
-                      editingStatusNoteId 
-                        ? 'bg-amber-50/30 border-amber-200 focus:ring-amber-500/5 focus:border-amber-500 focus:bg-white' 
-                        : 'bg-[#F8FAFC] border-[#E2E8F0] focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white'
+                      !isLeadOwner
+                        ? 'bg-[#F8FAFC] border-[#E2E8F0] cursor-not-allowed opacity-60'
+                        : editingStatusNoteId
+                          ? 'bg-amber-50/30 border-amber-200 focus:ring-amber-500/5 focus:border-amber-500 focus:bg-white'
+                          : 'bg-[#F8FAFC] border-[#E2E8F0] focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white'
                     }`}
                   />
                 </div>
@@ -1778,7 +2060,7 @@ export default function LeadDetail() {
                     <button
                       type="button"
                       onClick={saveStatusNote}
-                      disabled={!noteDraft.trim() || isSavingStatusNote}
+                      disabled={!isLeadOwner || !noteDraft.trim() || isSavingStatusNote}
                       className={`flex-[2] h-11 rounded-xl text-white text-xs font-bold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg flex items-center justify-center gap-2 ${
                         editingStatusNoteId 
                           ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-100' 
@@ -1837,27 +2119,31 @@ export default function LeadDetail() {
                               <span className="text-[11px] font-bold text-[#475569]">{entry.createdByName || 'BuildFlow user'}</span>
                             </div>
                             <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button 
-                                onClick={() => startEditingStatusNote(entry)}
-                                className="p-1.5 rounded-lg text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#1D4ED8] transition-all"
-                                title="Edit Note"
-                              >
-                                <Pencil size={12} />
-                              </button>
-                              <button 
-                                onClick={() => handleDeleteStatusNote(entry)}
-                                disabled={deletingStatusNoteId === entry._id}
-                                className="p-1.5 rounded-lg text-[#64748B] hover:bg-red-50 hover:text-red-600 transition-all disabled:opacity-50"
-                                title="Delete Note"
-                              >
-                                {deletingStatusNoteId === entry._id ? (
-                                  <div className="w-3 h-3 border-2 border-red-200 border-t-red-600 rounded-full animate-spin" />
-                                ) : (
-                                  <Trash2 size={12} />
-                                )}
-                              </button>
-                              <div className="w-px h-3 bg-[#E2E8F0] mx-0.5" />
-                              <button 
+                              {isLeadOwner && (
+                                <>
+                                  <button
+                                    onClick={() => startEditingStatusNote(entry)}
+                                    className="p-1.5 rounded-lg text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#1D4ED8] transition-all"
+                                    title="Edit Note"
+                                  >
+                                    <Pencil size={12} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteStatusNote(entry)}
+                                    disabled={deletingStatusNoteId === entry._id}
+                                    className="p-1.5 rounded-lg text-[#64748B] hover:bg-red-50 hover:text-red-600 transition-all disabled:opacity-50"
+                                    title="Delete Note"
+                                  >
+                                    {deletingStatusNoteId === entry._id ? (
+                                      <div className="w-3 h-3 border-2 border-red-200 border-t-red-600 rounded-full animate-spin" />
+                                    ) : (
+                                      <Trash2 size={12} />
+                                    )}
+                                  </button>
+                                  <div className="w-px h-3 bg-[#E2E8F0] mx-0.5" />
+                                </>
+                              )}
+                              <button
                                 onClick={() => {
                                   navigator.clipboard.writeText(entry.note)
                                 }}
@@ -1920,6 +2206,64 @@ export default function LeadDetail() {
               onClose={() => setShowReminderForm(false)}
               onSubmit={createLeadReminder}
             />
+          )}
+
+          {/* Status Note Required Modal */}
+          {showStatusNoteModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm border border-[#E2E8F0] overflow-hidden">
+                {/* Header */}
+                <div className="px-5 py-4 border-b border-[#F1F5F9] bg-gradient-to-r from-[#EFF6FF] to-white">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-[#1D4ED8] flex items-center justify-center shadow-sm">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-[#0F172A]">Add a Status Note</p>
+                      <p className="text-[10px] text-[#64748B]">
+                        Updating to <span className="font-semibold text-[#1D4ED8]">{dispositionDraft}</span> requires a note
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Body */}
+                <div className="px-5 py-4 space-y-3">
+                  <textarea
+                    autoFocus
+                    value={modalNoteText}
+                    onChange={(e) => setModalNoteText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleConfirmModalNote()
+                      if (e.key === 'Escape') { setShowStatusNoteModal(false); setModalNoteText('') }
+                    }}
+                    rows={4}
+                    placeholder={`Describe what happened or the reason for moving to "${dispositionDraft}"...`}
+                    className="w-full px-3 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-sm text-[#0F172A] resize-none focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/10 focus:border-[#1D4ED8] focus:bg-white transition-all placeholder:text-[#94A3B8]"
+                  />
+                  <p className="text-[10px] text-[#94A3B8]">Tip: Press Ctrl+Enter to save quickly</p>
+                </div>
+
+                {/* Footer */}
+                <div className="px-5 py-3 border-t border-[#F1F5F9] flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setShowStatusNoteModal(false); setModalNoteText('') }}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-[#64748B] bg-[#F8FAFC] border border-[#E2E8F0] hover:bg-[#F1F5F9] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmModalNote}
+                    disabled={!modalNoteText.trim() || isUpdatingDisposition}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#1D4ED8] hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUpdatingDisposition ? 'Updating...' : 'Confirm & Update Status'}
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
 
@@ -2039,12 +2383,14 @@ export default function LeadDetail() {
           <div className="p-5">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-bold text-[#0F172A]">Follow-up Timeline</p>
-              <button
-                onClick={() => setShowFollowUpForm(true)}
-                className="text-[10px] font-semibold px-2.5 py-1 bg-[#1D4ED8] text-white rounded hover:bg-[#1E40AF] transition-colors"
-              >
-                + Add
-              </button>
+              {isLeadOwner && (
+                <button
+                  onClick={() => setShowFollowUpForm(true)}
+                  className="text-[10px] font-semibold px-2.5 py-1 bg-[#1D4ED8] text-white rounded hover:bg-[#1E40AF] transition-colors"
+                >
+                  + Add
+                </button>
+              )}
             </div>
 
             {/* Follow-up Form */}
@@ -2146,28 +2492,30 @@ export default function LeadDetail() {
                               {followUp.notes}
                             </p>
                           )}
-                          <div className="flex items-center gap-2 mt-2">
-                            {isPending && (
+                          {isLeadOwner && (
+                            <div className="flex items-center gap-2 mt-2">
+                              {isPending && (
+                                <button
+                                  onClick={() => handleUpdateFollowUp(followUp._id, { status: 'completed' })}
+                                  className="text-[9px] font-medium px-2 py-0.5 bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors"
+                                >
+                                  Mark Done
+                                </button>
+                              )}
                               <button
-                                onClick={() => handleUpdateFollowUp(followUp._id, { status: 'completed' })}
-                                className="text-[9px] font-medium px-2 py-0.5 bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors"
+                                onClick={() => openEditFollowUp(followUp)}
+                                className="text-[9px] font-medium px-2 py-0.5 bg-[#F1F5F9] text-[#64748B] rounded hover:bg-[#E2E8F0] transition-colors"
                               >
-                                Mark Done
+                                Edit
                               </button>
-                            )}
-                            <button
-                              onClick={() => openEditFollowUp(followUp)}
-                              className="text-[9px] font-medium px-2 py-0.5 bg-[#F1F5F9] text-[#64748B] rounded hover:bg-[#E2E8F0] transition-colors"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteFollowUp(followUp._id)}
-                              className="text-[9px] font-medium px-2 py-0.5 bg-red-50 text-red-500 rounded hover:bg-red-100 transition-colors"
-                            >
-                              Delete
-                            </button>
-                          </div>
+                              <button
+                                onClick={() => handleDeleteFollowUp(followUp._id)}
+                                className="text-[9px] font-medium px-2 py-0.5 bg-red-50 text-red-500 rounded hover:bg-red-100 transition-colors"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )

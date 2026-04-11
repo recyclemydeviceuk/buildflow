@@ -9,12 +9,7 @@ import { UserRole } from '../../App'
 import { remindersAPI } from '../../api/reminders'
 import { settingsAPI } from '../../api/settings'
 import { useSocket } from '../../context/SocketContext'
-import {
-  DEFAULT_FEATURE_CONTROLS,
-  FEATURE_CONTROLS_STORAGE_KEY,
-  FEATURE_CONTROLS_UPDATED_EVENT,
-  normalizeFeatureControls,
-} from '../../utils/featureControls'
+import { useFeatureControls } from '../../context/FeatureControlsContext'
 
 interface SidebarProps {
   role: UserRole
@@ -64,49 +59,19 @@ export default function Sidebar({ role }: SidebarProps) {
   const location = useLocation()
   const { user, logout, refreshUser, updateUser } = useAuth()
   const { socket, connected } = useSocket()
-  const [featureControls, setFeatureControls] = useState(DEFAULT_FEATURE_CONTROLS)
+  const featureControls = useFeatureControls()
   const [availabilityUpdating, setAvailabilityUpdating] = useState(false)
   const [reminderBadgeCount, setReminderBadgeCount] = useState(0)
-  const navItems = (role === 'manager' ? managerNav : repNav).filter(
-    (item) => item.path !== '/dialer' || featureControls.dialer
-  )
-
-  useEffect(() => {
-    settingsAPI
-      .getAppConfig()
-      .then((response) => {
-        if (response.success) {
-          setFeatureControls(normalizeFeatureControls(response.data.featureControls))
-        }
-      })
-      .catch((error) => {
-        console.error('Failed to load app config for sidebar:', error)
-      })
-
-    const handleFeatureControlsUpdated = (event: Event) => {
-      const customEvent = event as CustomEvent
-      setFeatureControls(normalizeFeatureControls(customEvent.detail))
-    }
-
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key !== FEATURE_CONTROLS_STORAGE_KEY || !event.newValue) return
-
-      try {
-        const parsed = JSON.parse(event.newValue)
-        setFeatureControls(normalizeFeatureControls(parsed?.featureControls))
-      } catch (error) {
-        console.error('Failed to sync feature controls from storage:', error)
-      }
-    }
-
-    window.addEventListener(FEATURE_CONTROLS_UPDATED_EVENT, handleFeatureControlsUpdated as EventListener)
-    window.addEventListener('storage', handleStorage)
-
-    return () => {
-      window.removeEventListener(FEATURE_CONTROLS_UPDATED_EVENT, handleFeatureControlsUpdated as EventListener)
-      window.removeEventListener('storage', handleStorage)
-    }
-  }, [])
+  const navItems = (role === 'manager' ? managerNav : repNav).filter((item) => {
+    if (item.path === '/dialer' && !featureControls.dialer) return false
+    if (item.path === '/analytics' && !featureControls.analyticsAccess) return false
+    if (item.path === '/performance' && !featureControls.analyticsAccess) return false
+    if (item.path === '/reports' && !featureControls.analyticsAccess) return false
+    if (item.path === '/audit' && !featureControls.auditLog) return false
+    if (item.path === '/reminders' && !featureControls.followUpReminders) return false
+    if (item.path === '/follow-ups' && !featureControls.followUpReminders) return false
+    return true
+  })
 
   // Initial refresh on socket connect (only once per connect)
   useEffect(() => {

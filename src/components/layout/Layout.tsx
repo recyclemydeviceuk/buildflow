@@ -3,24 +3,26 @@ import { Outlet, useNavigate } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import { useAuth } from '../../context/AuthContext'
 import { useSocket } from '../../context/SocketContext'
+import { useFeatureControls } from '../../context/FeatureControlsContext'
 import type { Call } from '../../api/calls'
 import { followUpsAPI, type FollowUpRecord } from '../../api/followUps'
-import { PhoneIncoming, ArrowUpRight, CalendarClock, CheckCircle2, Clock3 } from 'lucide-react'
+import { PhoneIncoming, ArrowUpRight, CalendarClock, CheckCircle2, Clock3, UserCheck } from 'lucide-react'
 
 export default function Layout() {
   const { user } = useAuth()
   const { socket } = useSocket()
   const navigate = useNavigate()
+  const featureControls = useFeatureControls()
   const [incomingCall, setIncomingCall] = useState<Call | null>(null)
   const [followUpPopup, setFollowUpPopup] = useState<FollowUpRecord | null>(null)
+  const [assignedLeadPopup, setAssignedLeadPopup] = useState<{ leadId: string; leadName?: string } | null>(null)
 
   useEffect(() => {
     if (!socket) return
 
-    socket.on('lead:assigned', (data: { leadId: string; assignedTo: string; assignedToName: string }) => {
+    socket.on('lead:assigned', (data: { leadId: string; leadName?: string; assignedTo: string; assignedToName: string }) => {
       if (data.assignedTo === user?.id) {
-        console.log('A lead has been assigned to you!')
-        // Optional: show a small toast or notification
+        setAssignedLeadPopup({ leadId: data.leadId, leadName: data.leadName })
       }
     })
 
@@ -46,7 +48,7 @@ export default function Layout() {
   }, [socket, user?.id, user?.role, incomingCall?._id])
 
   useEffect(() => {
-    if (user?.role !== 'representative') {
+    if (user?.role !== 'representative' || !featureControls.followUpReminders) {
       setFollowUpPopup(null)
       return
     }
@@ -110,7 +112,7 @@ export default function Layout() {
       window.removeEventListener('focus', handleFocus)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [followUpPopup, user?.role])
+  }, [followUpPopup, user?.role, featureControls.followUpReminders])
 
   const handleConfirmFollowUpPopup = async () => {
     if (!followUpPopup) return
@@ -170,6 +172,47 @@ export default function Layout() {
               >
                 Dismiss
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {assignedLeadPopup && (
+        <div className="fixed inset-0 z-[70] bg-black/55 backdrop-blur-[6px] flex items-center justify-center p-4">
+          <div className="w-full max-w-[400px] rounded-3xl border border-[#BFDBFE] bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)] overflow-hidden">
+            <div className="px-5 py-4 bg-gradient-to-r from-[#EFF6FF] to-white border-b border-[#DBEAFE]">
+              <div className="flex items-center gap-2">
+                <UserCheck size={18} className="text-[#1D4ED8]" />
+                <p className="text-sm font-bold text-[#0F172A]">Lead Assigned To You</p>
+              </div>
+              <p className="text-xs text-[#64748B] mt-1">
+                A new lead has been assigned to you. Open it to review and accept.
+              </p>
+            </div>
+            <div className="px-5 py-4">
+              {assignedLeadPopup.leadName ? (
+                <p className="text-base font-bold text-[#0F172A]">{assignedLeadPopup.leadName}</p>
+              ) : (
+                <p className="text-sm text-[#475569]">A lead is waiting for your attention.</p>
+              )}
+              <div className="flex items-center gap-3 mt-4">
+                <button
+                  onClick={() => {
+                    navigate(`/leads/${assignedLeadPopup.leadId}`)
+                    setAssignedLeadPopup(null)
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#1D4ED8] text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-colors"
+                >
+                  View Lead
+                  <ArrowUpRight size={14} />
+                </button>
+                <button
+                  onClick={() => setAssignedLeadPopup(null)}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 border border-[#E2E8F0] bg-white text-sm font-semibold text-[#475569] rounded-xl hover:bg-[#F8FAFC] transition-colors"
+                >
+                  Dismiss
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, MapPin, ChevronRight, ArrowUpDown, X, Plus, ChevronLeft, RefreshCw, Trash2, ToggleLeft, ToggleRight, Loader2, Download } from 'lucide-react'
+import { Search, MapPin, ChevronRight, ArrowUpDown, X, Plus, ChevronLeft, RefreshCw, Trash2, ToggleLeft, ToggleRight, Loader2, Download, User } from 'lucide-react'
 import { leadsAPI, type Lead } from '../api/leads'
 import type { LeadFieldConfig } from '../api/settings'
 import { teamAPI } from '../api/team'
@@ -14,6 +14,8 @@ import DateRangePicker, { type DateRange } from '../components/common/DateRangeP
 import { useAuth } from '../context/AuthContext'
 import { useSocket } from '../context/SocketContext'
 import { LEAD_FIELDS_STORAGE_KEY, LEAD_FIELDS_UPDATED_EVENT } from '../utils/leadFields'
+import { settingsAPI } from '../api/settings'
+import { useFeatureControls } from '../context/FeatureControlsContext'
 
 const dispositionColors: Record<string, { bg: string; text: string }> = {
   New: { bg: '#EFF6FF', text: '#1D4ED8' },
@@ -108,6 +110,7 @@ export default function LeadList() {
 
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
+  const [ownershipToast, setOwnershipToast] = useState(false)
 
   const [search, setSearch] = useState(persistedFilters.search)
   const [filterDisposition, setFilterDisposition] = useState<string>(persistedFilters.disposition)
@@ -140,6 +143,8 @@ export default function LeadList() {
   const [loadingMore, setLoadingMore] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const leadListRequestVersionRef = useRef(0)
+  const featureControls = useFeatureControls()
+  const [showMyLeadsOnly, setShowMyLeadsOnly] = useState(false)
 
   const [dispositions, setDispositions] = useState<string[]>([
     'All',
@@ -242,6 +247,8 @@ export default function LeadList() {
       if (filterSource !== 'All') params.source = filterSource
       if (filterCity !== 'All') params.city = filterCity
       if (isManager && filterOwner !== 'All') params.owner = filterOwner
+      // Reps see all leads by default; when "My Leads" mode is on, filter to their own
+      if (!isManager && showMyLeadsOnly && user?.id) params.owner = user.id
 
       if (dateRange.from) {
         const fromDate = new Date(dateRange.from)
@@ -257,7 +264,7 @@ export default function LeadList() {
 
       return params
     },
-    [search, filterDisposition, filterSource, filterCity, isManager, filterOwner, dateRange]
+    [search, filterDisposition, filterSource, filterCity, isManager, filterOwner, dateRange, showMyLeadsOnly, user?.id]
   )
 
   const fetchLeads = useCallback(
@@ -445,7 +452,21 @@ export default function LeadList() {
     }
   }
 
+  // Per-lead ownership: true if manager OR the current rep owns that lead
+  const isLeadOwnerOfRow = (lead: Lead) =>
+    isManager || (Boolean(lead.owner) && String(lead.owner) === String(user?.id))
+
+  const showOwnershipError = () => {
+    setOwnershipToast(true)
+    setTimeout(() => setOwnershipToast(false), 3500)
+  }
+
   const handleAssignLead = async (leadId: string, userId: string | null) => {
+    const targetLead = leads.find((l) => l._id === leadId)
+    if (targetLead && !isLeadOwnerOfRow(targetLead)) {
+      showOwnershipError()
+      return
+    }
     try {
       setAssigningLeadId(leadId)
       const response = await leadsAPI.assignLead(leadId, userId)
@@ -536,6 +557,7 @@ export default function LeadList() {
     filterSource !== 'All' ||
     filterCity !== 'All' ||
     (isManager && filterOwner !== 'All') ||
+    (!isManager && showMyLeadsOnly) ||
     Boolean(dateRange.from || dateRange.to)
 
   const clearFilters = () => {
@@ -545,6 +567,7 @@ export default function LeadList() {
     setFilterOwner('All')
     setSearch('')
     setDateRange({ from: null, to: null })
+    if (!isManager) setShowMyLeadsOnly(false)
   }
 
   const handleRefresh = async () => {
@@ -714,6 +737,20 @@ export default function LeadList() {
 
   return (
     <div className="h-screen bg-[#F8FAFC] flex flex-col">
+      {/* Ownership toast — shown when a non-owner rep tries to transfer a lead */}
+      {ownershipToast && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[90] flex items-center gap-3 px-5 py-3 rounded-2xl bg-[#1E293B] text-white shadow-2xl animate-fade-in">
+          <div className="w-6 h-6 rounded-full bg-[#F59E0B] flex items-center justify-center shrink-0">
+            <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-bold">You can't transfer this lead</p>
+            <p className="text-xs text-[#94A3B8]">Only the lead owner or a manager can transfer leads.</p>
+          </div>
+        </div>
+      )}
       <div className="bg-white border-b border-[#E2E8F0] px-5 py-3">
         <div className="flex items-center justify-between mb-2.5 gap-2 flex-wrap">
           <div>
@@ -772,15 +809,17 @@ export default function LeadList() {
 
             {selectedLeadIds.length ? (
               <>
-                <button
-                  onClick={() => setShowBulkEditModal(true)}
-                  disabled={bulkUpdating}
-                  className="inline-flex items-center gap-1.5 h-8 px-3 border border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8] text-xs font-bold rounded-lg hover:bg-[#DBEAFE] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <Plus size={12} />
-                  {bulkUpdating ? 'Updating...' : `Bulk Edit (${selectedLeadIds.length})`}
-                </button>
-                {isManager ? (
+                {featureControls.bulkEdit && (
+                  <button
+                    onClick={() => setShowBulkEditModal(true)}
+                    disabled={bulkUpdating}
+                    className="inline-flex items-center gap-1.5 h-8 px-3 border border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8] text-xs font-bold rounded-lg hover:bg-[#DBEAFE] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <Plus size={12} />
+                    {bulkUpdating ? 'Updating...' : `Bulk Edit (${selectedLeadIds.length})`}
+                  </button>
+                )}
+                {isManager && featureControls.bulkEdit ? (
                   <button
                     onClick={handleBulkDelete}
                     disabled={bulkDeleting}
@@ -792,7 +831,7 @@ export default function LeadList() {
                 ) : null}
               </>
             ) : null}
-            {isManager ? (
+            {isManager && featureControls.exportLeads ? (
               <button
                 onClick={() => setShowExportModal(true)}
                 className="inline-flex items-center gap-1.5 h-8 px-3 border border-[#D1FAE5] bg-[#F0FDF4] text-[#15803D] text-xs font-bold rounded-lg hover:bg-[#DCFCE7] transition-colors"
@@ -869,7 +908,19 @@ export default function LeadList() {
               minWidth={70}
               panelWidth={200}
             />
-          ) : null}
+          ) : (
+            <button
+              onClick={() => setShowMyLeadsOnly((v) => !v)}
+              className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-bold border transition-colors ${
+                showMyLeadsOnly
+                  ? 'bg-[#EFF6FF] border-[#BFDBFE] text-[#1D4ED8]'
+                  : 'bg-white border-[#E2E8F0] text-[#64748B] hover:border-[#1D4ED8] hover:text-[#1D4ED8]'
+              }`}
+            >
+              <User size={12} />
+              {showMyLeadsOnly ? 'My Leads' : 'All Leads'}
+            </button>
+          )}
 
           <DateRangePicker
             value={dateRange}
@@ -933,7 +984,9 @@ export default function LeadList() {
                     <p className="text-[#94A3B8] text-xs mt-1">
                       {isManager
                         ? 'New leads will appear here as unassigned until a manager routes them manually.'
-                        : 'You will only see leads currently assigned to you.'}
+                        : showMyLeadsOnly
+                          ? 'No leads are assigned to you yet.'
+                          : 'No leads found. Try adjusting your filters.'}
                     </p>
                   </td>
                 </tr>
@@ -979,7 +1032,8 @@ export default function LeadList() {
                         </div>
                       </td>
                       <td className="px-3 py-2.5">
-                        {canAssignOwner ? (
+                        {isLeadOwnerOfRow(lead) ? (
+                          /* Owner or manager — full interactive picker */
                           <div onClick={(event) => event.stopPropagation()}>
                             <RepresentativePicker
                               value={lead.owner ? String(lead.owner) : null}
@@ -990,17 +1044,23 @@ export default function LeadList() {
                               compact
                             />
                           </div>
-                        ) : lead.ownerName ? (
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-6 h-6 rounded-md bg-[#E2E8F0] flex items-center justify-center text-[#475569] text-[9px] font-bold shrink-0">
-                              {lead.ownerName.split(' ').map((part) => part[0]).join('')}
-                            </div>
-                            <span className="text-[11px] font-medium text-[#475569] truncate max-w-[100px]">
-                              {lead.ownerName}
-                            </span>
-                          </div>
                         ) : (
-                          <span className="text-[10px] text-[#94A3B8] italic">Unassigned</span>
+                          /* Non-owner rep — read-only display, click shows toast */
+                          <div
+                            onClick={(e) => { e.stopPropagation(); showOwnershipError() }}
+                            className="flex items-center gap-1.5 cursor-not-allowed group"
+                            title="Only the lead owner can transfer this lead"
+                          >
+                            <div className="w-6 h-6 rounded-md bg-[#E2E8F0] flex items-center justify-center text-[#475569] text-[9px] font-bold shrink-0">
+                              {lead.ownerName ? lead.ownerName.split(' ').map((p) => p[0]).join('') : '?'}
+                            </div>
+                            <span className="text-[11px] font-medium text-[#475569] truncate max-w-[80px]">
+                              {lead.ownerName || 'Unassigned'}
+                            </span>
+                            <svg className="w-3 h-3 text-[#CBD5E1] shrink-0 group-hover:text-[#F59E0B] transition-colors" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
                         )}
                       </td>
                       <td className="px-3 py-2.5">

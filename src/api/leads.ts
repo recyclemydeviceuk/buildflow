@@ -37,6 +37,18 @@ export interface Lead {
   meetingType?: 'VC' | 'Client Place' | null
   meetingLocation?: string | null
   failedReason?: string | null
+  // Booking Done fields
+  bookingPackage?: string | null
+  proposedProjectValue?: string | null
+  bookingAmountCollected?: string | null
+  bookingDate?: string | null
+  numberOfFloors?: string | null
+  assignedArchitect?: string | null
+  // Agreement Done fields
+  agreementProjectValue?: string | null
+  agreementDate?: string | null
+  agreementAmount?: string | null
+  totalCollection?: string | null
   owner?: string | null
   ownerName?: string | null
   budget?: string | null

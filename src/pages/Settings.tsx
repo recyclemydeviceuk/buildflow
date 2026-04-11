@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  Edit3,
   Eye,
   EyeOff,
   LayoutList,
@@ -35,6 +36,7 @@ const managerSections = [
   { id: 'routing', label: 'Lead Assignment', icon: Settings2 },
   { id: 'leadfields', label: 'Lead Fields', icon: LayoutList },
   { id: 'cities', label: 'Cities', icon: MapPin },
+  { id: 'sources', label: 'Lead Sources', icon: Search },
   { id: 'features', label: 'Feature Controls', icon: Shield },
   { id: 'sms-templates', label: 'SMS Templates', icon: MessageSquare },
   { id: 'security', label: 'Security', icon: Shield },
@@ -148,211 +150,281 @@ function LeadFieldsSection({ onSave }: SectionProps) {
     (field) => !['name', 'phone', 'city'].includes(field.key) && !field.active
   )
 
+  const typeColors: Record<string, { bg: string; text: string }> = {
+    text:    { bg: '#EFF6FF', text: '#1D4ED8' },
+    email:   { bg: '#F0FDF4', text: '#16A34A' },
+    number:  { bg: '#FFF7ED', text: '#EA580C' },
+    select:  { bg: '#F5F3FF', text: '#7C3AED' },
+    boolean: { bg: '#FDF4FF', text: '#9333EA' },
+  }
+  const sectionColors: Record<string, { bg: string; text: string }> = {
+    core:          { bg: '#EFF6FF', text: '#1D4ED8' },
+    qualification: { bg: '#ECFDF5', text: '#059669' },
+  }
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-base font-bold text-[#0F172A] mb-1">Lead Fields</h2>
-        <p className="text-sm text-[#64748B]">Manage the real lead form fields used across manual leads and lead detail screens.</p>
+    <div className="space-y-5">
+      {/* Sticky save bar */}
+      <div className="sticky top-0 z-20 -mx-1 px-1 py-3 bg-white/95 backdrop-blur-md border-b border-[#E2E8F0] flex items-center justify-between gap-4 shadow-sm">
+        <div>
+          <h2 className="text-sm font-bold text-[#0F172A]">Lead Fields</h2>
+          <p className="text-xs text-[#94A3B8]">Configure fields used in lead forms &amp; the lead detail page.</p>
+        </div>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="shrink-0 inline-flex items-center gap-2 px-5 py-2 bg-[#1D4ED8] text-white rounded-xl font-bold text-sm hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50 shadow-md shadow-blue-200"
+        >
+          {saving ? (
+            <>
+              <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+              Saving…
+            </>
+          ) : (
+            <>
+              <Check size={14} />
+              Save Fields
+            </>
+          )}
+        </button>
       </div>
 
       {successMessage ? (
-        <div className="px-4 py-3 rounded-2xl border border-[#BBF7D0] bg-[#F0FDF4] text-sm font-medium text-[#166534]">
-          {successMessage}
+        <div className="flex items-center gap-3 px-4 py-3 rounded-2xl border border-[#BBF7D0] bg-[#F0FDF4]">
+          <Check size={15} className="text-[#16A34A] shrink-0" />
+          <p className="text-sm font-semibold text-[#166534]">{successMessage}</p>
         </div>
       ) : null}
 
       {error ? (
-        <div className="px-4 py-3 rounded-2xl border border-[#FECACA] bg-[#FEF2F2] text-sm font-medium text-[#B91C1C]">
+        <div className="px-4 py-3 rounded-2xl border border-[#FECACA] bg-[#FEF2F2] text-sm font-semibold text-[#B91C1C]">
           {error}
         </div>
       ) : null}
 
-      <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 space-y-6">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider">Configured Fields</p>
-              <p className="text-sm text-[#94A3B8] mt-1">Add, edit, reorder, or remove lead fields from the CRM form.</p>
-            </div>
-            <div className="text-xs font-semibold text-[#64748B]">
-              {editableFields.length} fields
-            </div>
-          </div>
+      {/* Field count summary */}
+      <div className="flex items-center justify-between px-1">
+        <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider">
+          {visibleFields.length} Active Field{visibleFields.length !== 1 ? 's' : ''}
+        </p>
+        <p className="text-xs text-[#94A3B8]">Changes are applied after saving</p>
+      </div>
 
-          <div className="space-y-3">
-            {visibleFields.map((field, index) => {
-              const canRemove = !['name', 'phone', 'city'].includes(field.key)
-              const supportsOptions = field.key === 'buildType' || field.key === 'plotSizeUnit'
+      {/* Field cards */}
+      <div className="space-y-3">
+        {visibleFields.map((field, index) => {
+          const canRemove = !['name', 'phone', 'city'].includes(field.key)
+          const isLocked = !canRemove
+          const supportsOptions = field.key === 'buildType' || field.key === 'plotSizeUnit'
+          const tc = typeColors[field.type] || typeColors.text
+          const sc = sectionColors[field.section] || sectionColors.qualification
 
-              return (
-                <div key={field.key} className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 space-y-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-bold text-[#0F172A]">{field.label}</p>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white border border-[#E2E8F0] text-[#475569]">
-                          {field.key}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white border border-[#E2E8F0] text-[#475569] capitalize">
-                          {field.section}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white border border-[#E2E8F0] text-[#475569] capitalize">
-                          {field.type}
-                        </span>
-                      </div>
+          return (
+            <div
+              key={field.key}
+              className={`group relative rounded-2xl border bg-white shadow-sm transition-all hover:shadow-md ${
+                field.active ? 'border-[#E2E8F0]' : 'border-dashed border-[#CBD5E1] opacity-60'
+              }`}
+            >
+              {/* Left accent bar */}
+              <div className={`absolute left-0 top-3 bottom-3 w-[3px] rounded-full ${field.active ? 'bg-[#1D4ED8]' : 'bg-[#CBD5E1]'}`} />
+
+              <div className="pl-4 pr-4 pt-4 pb-4 space-y-4">
+                {/* Card header */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-bold text-[#0F172A] truncate">{field.label}</p>
+                      {isLocked && (
+                        <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-[#F1F5F9] text-[#64748B] uppercase tracking-wider">Locked</span>
+                      )}
                     </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => moveField(field.key, 'up')}
-                        disabled={index === 0}
-                        className="p-2 rounded-xl border border-[#E2E8F0] text-[#475569] disabled:opacity-40"
-                      >
-                        <ChevronUp size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => moveField(field.key, 'down')}
-                        disabled={index === visibleFields.length - 1}
-                        className="p-2 rounded-xl border border-[#E2E8F0] text-[#475569] disabled:opacity-40"
-                      >
-                        <ChevronDown size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeField(field.key)}
-                        disabled={!canRemove}
-                        className="p-2 rounded-xl border border-[#FECACA] text-[#DC2626] disabled:opacity-30"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: tc.bg, color: tc.text }}>{field.type}</span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: sc.bg, color: sc.text }}>{field.section}</span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-[#F8FAFC] text-[#94A3B8] border border-[#E2E8F0]">{field.key}</span>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <label className="space-y-2">
-                      <span className="text-xs font-bold uppercase tracking-wide text-[#94A3B8]">Label</span>
-                      <input
-                        value={field.label}
-                        onChange={(event) => updateField(field.key, { label: event.target.value })}
-                        className="w-full px-3.5 py-2.5 bg-white border border-[#E2E8F0] rounded-xl text-sm"
-                      />
-                    </label>
-
-                    <label className="space-y-2">
-                      <span className="text-xs font-bold uppercase tracking-wide text-[#94A3B8]">Placeholder</span>
-                      <input
-                        value={field.placeholder || ''}
-                        onChange={(event) => updateField(field.key, { placeholder: event.target.value })}
-                        className="w-full px-3.5 py-2.5 bg-white border border-[#E2E8F0] rounded-xl text-sm"
-                        disabled={field.key === 'city' || field.key === 'plotOwned'}
-                      />
-                    </label>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => moveField(field.key, 'up')}
+                      disabled={index === 0}
+                      className="p-1.5 rounded-lg hover:bg-[#F1F5F9] text-[#94A3B8] hover:text-[#475569] disabled:opacity-30 transition-colors"
+                      title="Move up"
+                    >
+                      <ChevronUp size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveField(field.key, 'down')}
+                      disabled={index === visibleFields.length - 1}
+                      className="p-1.5 rounded-lg hover:bg-[#F1F5F9] text-[#94A3B8] hover:text-[#475569] disabled:opacity-30 transition-colors"
+                      title="Move down"
+                    >
+                      <ChevronDown size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeField(field.key)}
+                      disabled={isLocked}
+                      className="p-1.5 rounded-lg hover:bg-[#FEF2F2] text-[#94A3B8] hover:text-[#DC2626] disabled:opacity-20 transition-colors"
+                      title="Remove field"
+                    >
+                      <Trash2 size={13} />
+                    </button>
                   </div>
-
-                  <div className="flex items-center gap-6 flex-wrap">
-                    <label className="flex items-center gap-2 text-sm font-semibold text-[#475569]">
-                      <input
-                        type="checkbox"
-                        checked={field.required}
-                        disabled={['name', 'phone', 'city'].includes(field.key)}
-                        onChange={(event) => updateField(field.key, { required: event.target.checked })}
-                      />
-                      Required
-                    </label>
-                    <label className="flex items-center gap-2 text-sm font-semibold text-[#475569]">
-                      <input
-                        type="checkbox"
-                        checked={field.active}
-                        disabled={['name', 'phone', 'city'].includes(field.key)}
-                        onChange={(event) => updateField(field.key, { active: event.target.checked })}
-                      />
-                      Show in forms
-                    </label>
-                  </div>
-
-                  {supportsOptions ? (
-                    <div className="space-y-2">
-                      <span className="text-xs font-bold uppercase tracking-wide text-[#94A3B8]">Dropdown Options</span>
-                      <div className="space-y-2">
-                        {(field.options || []).map((option, optionIndex) => (
-                          <div key={`${field.key}-${optionIndex}`} className="flex items-center gap-2">
-                            <input
-                              value={option}
-                              onChange={(event) => {
-                                const nextOptions = [...(field.options || [])]
-                                nextOptions[optionIndex] = event.target.value
-                                updateField(field.key, { options: nextOptions })
-                              }}
-                              className="flex-1 px-3.5 py-2.5 bg-white border border-[#E2E8F0] rounded-xl text-sm"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const nextOptions = (field.options || []).filter((_, idx) => idx !== optionIndex)
-                                updateField(field.key, { options: nextOptions })
-                              }}
-                              disabled={(field.options || []).length <= 1}
-                              className="p-2 rounded-xl border border-[#FECACA] text-[#DC2626] disabled:opacity-30"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => updateField(field.key, { options: [...(field.options || []), ''] })}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-[#E2E8F0] bg-white text-xs font-semibold text-[#475569]"
-                      >
-                        <Plus size={13} />
-                        Add Option
-                      </button>
-                    </div>
-                  ) : null}
                 </div>
-              )
-            })}
-          </div>
 
-                  {missingFieldOptions.length ? (
-            <div className="pt-4 border-t border-[#E2E8F0] flex flex-col md:flex-row items-start md:items-end gap-3">
-              <label className="flex-1 space-y-2">
-                <span className="text-xs font-bold uppercase tracking-wide text-[#94A3B8]">Restore Hidden Field</span>
-                <select
-                  value={newFieldKey}
-                  onChange={(event) => setNewFieldKey(event.target.value as LeadFieldKey | '')}
-                  className="w-full px-3.5 py-2.5 bg-white border border-[#E2E8F0] rounded-xl text-sm"
-                >
-                  <option value="">Select a lead field</option>
-                  {missingFieldOptions.map((field) => (
-                    <option key={field.key} value={field.key}>
-                      {field.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                {/* Label & Placeholder */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#94A3B8] px-0.5">Label</span>
+                    <input
+                      value={field.label}
+                      onChange={(event) => updateField(field.key, { label: event.target.value })}
+                      className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-sm font-medium text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/10 focus:border-[#1D4ED8] focus:bg-white transition-all"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#94A3B8] px-0.5">Placeholder</span>
+                    <input
+                      value={field.placeholder || ''}
+                      onChange={(event) => updateField(field.key, { placeholder: event.target.value })}
+                      disabled={field.key === 'city' || field.key === 'plotOwned'}
+                      className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-sm font-medium text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/10 focus:border-[#1D4ED8] focus:bg-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                </div>
+
+                {/* Toggles */}
+                <div className="flex items-center gap-4 flex-wrap pt-1">
+                  {/* Required toggle */}
+                  <button
+                    type="button"
+                    disabled={isLocked}
+                    onClick={() => !isLocked && updateField(field.key, { required: !field.required })}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+                      field.required
+                        ? 'bg-[#FFF7ED] border-[#FED7AA] text-[#EA580C]'
+                        : 'bg-[#F8FAFC] border-[#E2E8F0] text-[#94A3B8]'
+                    } disabled:opacity-40 disabled:cursor-not-allowed`}
+                  >
+                    <span className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center transition-colors ${field.required ? 'border-[#EA580C] bg-[#EA580C]' : 'border-[#CBD5E1]'}`}>
+                      {field.required && <span className="w-1 h-1 rounded-full bg-white" />}
+                    </span>
+                    Required
+                  </button>
+
+                  {/* Active/Show toggle */}
+                  <button
+                    type="button"
+                    disabled={isLocked}
+                    onClick={() => !isLocked && updateField(field.key, { active: !field.active })}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+                      field.active
+                        ? 'bg-[#F0FDF4] border-[#BBF7D0] text-[#16A34A]'
+                        : 'bg-[#F8FAFC] border-[#E2E8F0] text-[#94A3B8]'
+                    } disabled:opacity-40 disabled:cursor-not-allowed`}
+                  >
+                    <span className={`relative w-7 h-4 rounded-full transition-colors flex items-center px-0.5 ${field.active ? 'bg-[#16A34A]' : 'bg-[#CBD5E1]'}`}>
+                      <span className={`w-3 h-3 rounded-full bg-white shadow transition-transform ${field.active ? 'translate-x-3' : 'translate-x-0'}`} />
+                    </span>
+                    Show in forms
+                  </button>
+                </div>
+
+                {/* Dropdown options */}
+                {supportsOptions ? (
+                  <div className="space-y-2 pt-1 border-t border-[#F1F5F9]">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#94A3B8]">Dropdown Options</span>
+                    <div className="space-y-2">
+                      {(field.options || []).map((option, optionIndex) => (
+                        <div key={`${field.key}-${optionIndex}`} className="flex items-center gap-2">
+                          <input
+                            value={option}
+                            onChange={(event) => {
+                              const nextOptions = [...(field.options || [])]
+                              nextOptions[optionIndex] = event.target.value
+                              updateField(field.key, { options: nextOptions })
+                            }}
+                            className="flex-1 px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-sm font-medium text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/10 focus:border-[#1D4ED8] focus:bg-white transition-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextOptions = (field.options || []).filter((_, idx) => idx !== optionIndex)
+                              updateField(field.key, { options: nextOptions })
+                            }}
+                            disabled={(field.options || []).length <= 1}
+                            className="p-2 rounded-xl hover:bg-[#FEF2F2] text-[#94A3B8] hover:text-[#DC2626] disabled:opacity-25 transition-colors"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => updateField(field.key, { options: [...(field.options || []), ''] })}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-dashed border-[#BFDBFE] bg-[#EFF6FF] text-xs font-bold text-[#1D4ED8] hover:bg-[#DBEAFE] transition-colors"
+                    >
+                      <Plus size={12} />
+                      Add Option
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Restore hidden field */}
+      {missingFieldOptions.length ? (
+        <div className="rounded-2xl border border-dashed border-[#BFDBFE] bg-gradient-to-br from-[#EFF6FF]/60 to-white p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-[#1D4ED8] uppercase tracking-wider">Hidden Fields</p>
+              <p className="text-[11px] text-[#94A3B8] mt-0.5">Pick one to add back to the form</p>
+            </div>
+            {newFieldKey && (
               <button
                 type="button"
                 onClick={addField}
-                disabled={!newFieldKey}
-                className="px-4 py-2.5 bg-[#1D4ED8] text-white text-sm font-semibold rounded-xl disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#1D4ED8] text-white text-xs font-bold rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow shadow-blue-200"
               >
-                Add Field
+                <Plus size={12} />
+                Restore Field
               </button>
-            </div>
-          ) : null}
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {missingFieldOptions.map((field) => {
+              const selected = newFieldKey === field.key
+              return (
+                <button
+                  key={field.key}
+                  type="button"
+                  onClick={() => setNewFieldKey(selected ? '' : field.key as LeadFieldKey)}
+                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-all active:scale-95 ${
+                    selected
+                      ? 'bg-[#1D4ED8] border-[#1D4ED8] text-white shadow-md shadow-blue-200'
+                      : 'bg-white border-[#BFDBFE] text-[#1D4ED8] hover:bg-[#EFF6FF] hover:border-[#1D4ED8]'
+                  }`}
+                >
+                  <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${selected ? 'border-white bg-white' : 'border-[#93C5FD]'}`}>
+                    {selected && <span className="w-1.5 h-1.5 rounded-full bg-[#1D4ED8]" />}
+                  </span>
+                  {field.label}
+                  <span className={`text-[9px] font-mono px-1 py-0.5 rounded ${selected ? 'bg-white/20 text-white' : 'bg-[#EFF6FF] text-[#93C5FD]'}`}>{field.key}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
-      </div>
-
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="flex items-center gap-2 px-5 py-2.5 bg-[#1D4ED8] text-white rounded-xl font-semibold text-sm disabled:opacity-50"
-      >
-        {saving ? 'Saving...' : 'Save Lead Fields'}
-      </button>
+      ) : null}
     </div>
   )
 }
@@ -431,6 +503,248 @@ function CitiesSection({ onSave }: SectionProps) {
       >
         {saving ? 'Saving...' : 'Save Cities'}
       </button>
+    </div>
+  )
+}
+
+function SourcesSection({ onSave }: SectionProps) {
+  const [sources, setSources] = useState<string[]>([])
+  const [discoveredSources, setDiscoveredSources] = useState<string[]>([]) // in DB but not yet in settings
+  const [newSource, setNewSource] = useState('')
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [editingValue, setEditingValue] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [success, setSuccess] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        // getLeadFilters returns merged settings + DB sources
+        const [settingsRes, filtersRes] = await Promise.all([
+          settingsAPI.getSettings(),
+          import('../api/leads').then(m => m.leadsAPI.getLeadFilters()),
+        ])
+        const configured: string[] = (settingsRes.success && settingsRes.data.sources?.length)
+          ? settingsRes.data.sources
+          : ['Direct', 'Manual', 'Meta', 'Website', 'Google ADS']
+        const allFromDB: string[] = filtersRes.success ? filtersRes.data.sources : []
+        // Sources in DB that aren't yet in configured list
+        const discovered = allFromDB.filter(
+          s => !configured.map(c => c.toLowerCase()).includes(s.toLowerCase())
+        )
+        setSources(configured)
+        setDiscoveredSources(discovered)
+      } finally {
+        setLoading(false)
+      }
+    }
+    void load()
+  }, [])
+
+  const handleSave = async () => {
+    try {
+      setSaving(true)
+      setSuccess('')
+      setError('')
+      const res = await settingsAPI.updateSources(sources)
+      if (res.success) {
+        setSuccess('Lead sources saved successfully.')
+        onSave()
+      }
+    } catch {
+      setError('Failed to save sources. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const addSource = (name?: string) => {
+    const trimmed = (name ?? newSource).trim()
+    if (!trimmed) return
+    if (sources.map(s => s.toLowerCase()).includes(trimmed.toLowerCase())) {
+      setError('This source already exists.')
+      return
+    }
+    setSources(current => [...current, trimmed])
+    setDiscoveredSources(current => current.filter(s => s.toLowerCase() !== trimmed.toLowerCase()))
+    if (!name) setNewSource('')
+    setError('')
+    setSuccess('')
+  }
+
+  const removeSource = (index: number) => {
+    setSources(current => current.filter((_, i) => i !== index))
+    setSuccess('')
+  }
+
+  const startEdit = (index: number) => {
+    setEditingIndex(index)
+    setEditingValue(sources[index])
+    setSuccess('')
+  }
+
+  const saveEdit = (index: number) => {
+    const trimmed = editingValue.trim()
+    if (!trimmed) { setEditingIndex(null); return }
+    setSources(current => current.map((s, i) => i === index ? trimmed : s))
+    setEditingIndex(null)
+    setEditingValue('')
+  }
+
+  const addAllDiscovered = () => {
+    const toAdd = discoveredSources.filter(
+      d => !sources.map(s => s.toLowerCase()).includes(d.toLowerCase())
+    )
+    setSources(current => [...current, ...toAdd])
+    setDiscoveredSources([])
+    setSuccess('')
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Sticky header */}
+      <div className="sticky top-0 z-20 -mx-1 px-1 py-3 bg-white/95 backdrop-blur-md border-b border-[#E2E8F0] flex items-center justify-between gap-4 shadow-sm">
+        <div>
+          <h2 className="text-sm font-bold text-[#0F172A]">Lead Sources</h2>
+          <p className="text-xs text-[#94A3B8]">Manage all sources — configured ones and those from bulk imports.</p>
+        </div>
+        <button
+          onClick={handleSave}
+          disabled={saving || loading}
+          className="shrink-0 inline-flex items-center gap-2 px-5 py-2 bg-[#1D4ED8] text-white rounded-xl font-bold text-sm hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50 shadow-md shadow-blue-200"
+        >
+          {saving ? (
+            <><svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>Saving…</>
+          ) : (
+            <><Check size={14} />Save Sources</>
+          )}
+        </button>
+      </div>
+
+      {success && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-2xl border border-[#BBF7D0] bg-[#F0FDF4]">
+          <Check size={14} className="text-[#16A34A] shrink-0" />
+          <p className="text-sm font-semibold text-[#166534]">{success}</p>
+        </div>
+      )}
+      {error && (
+        <div className="px-4 py-3 rounded-2xl border border-[#FECACA] bg-[#FEF2F2] text-sm font-semibold text-[#B91C1C]">{error}</div>
+      )}
+
+      {loading ? (
+        <div className="py-12 text-center text-sm text-[#94A3B8]">Loading sources…</div>
+      ) : (
+        <>
+          {/* Discovered from DB but not yet configured */}
+          {discoveredSources.length > 0 && (
+            <div className="rounded-2xl border border-[#FED7AA] bg-[#FFF7ED] p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-[#EA580C] uppercase tracking-wider">Discovered from Imports</p>
+                  <p className="text-[11px] text-[#94A3B8] mt-0.5">These sources exist in your leads but aren't configured yet. Add them to manage.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addAllDiscovered}
+                  className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#EA580C] text-white text-xs font-bold rounded-xl hover:bg-orange-700 active:scale-95 transition-all"
+                >
+                  <Plus size={11} />
+                  Add All
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {discoveredSources.map(src => (
+                  <button
+                    key={src}
+                    type="button"
+                    onClick={() => addSource(src)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#FED7AA] bg-white text-xs font-bold text-[#EA580C] hover:bg-[#FFF7ED] hover:border-[#EA580C] active:scale-95 transition-all"
+                  >
+                    <Plus size={11} />
+                    {src}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Configured sources list */}
+          <div>
+            <p className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider mb-2 px-1">
+              Configured Sources ({sources.length})
+            </p>
+            <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden">
+              {sources.length === 0 && (
+                <div className="px-6 py-10 text-center text-sm text-[#94A3B8]">No sources yet. Add one below.</div>
+              )}
+              {sources.map((source, index) => (
+                <div key={`${source}-${index}`} className="flex items-center gap-3 px-5 py-3 border-b border-[#F1F5F9] last:border-b-0 hover:bg-[#F8FAFC] group transition-colors">
+                  <div className="w-2 h-2 rounded-full bg-[#1D4ED8] shrink-0 opacity-60" />
+
+                  {editingIndex === index ? (
+                    <input
+                      autoFocus
+                      value={editingValue}
+                      onChange={e => setEditingValue(e.target.value)}
+                      onBlur={() => saveEdit(index)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveEdit(index); if (e.key === 'Escape') setEditingIndex(null) }}
+                      className="flex-1 px-3 py-1 bg-[#F8FAFC] border border-[#1D4ED8] rounded-xl text-sm font-semibold text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/10"
+                    />
+                  ) : (
+                    <span className="flex-1 text-sm font-semibold text-[#0F172A]">{source}</span>
+                  )}
+
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(index)}
+                      className="p-1.5 rounded-lg hover:bg-[#EFF6FF] text-[#94A3B8] hover:text-[#1D4ED8] transition-colors"
+                      title="Rename"
+                    >
+                      <Edit3 size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeSource(index)}
+                      disabled={sources.length <= 1}
+                      className="p-1.5 rounded-lg hover:bg-[#FEF2F2] text-[#94A3B8] hover:text-[#DC2626] disabled:opacity-25 transition-colors"
+                      title="Remove"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Add new source */}
+          <div className="flex gap-2">
+            <input
+              value={newSource}
+              onChange={e => { setNewSource(e.target.value); setError('') }}
+              onKeyDown={e => { if (e.key === 'Enter') addSource() }}
+              placeholder="e.g. WhatsApp, 99acres, MagicBricks…"
+              className="flex-1 px-4 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-sm font-medium text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/10 focus:border-[#1D4ED8] focus:bg-white transition-all"
+            />
+            <button
+              type="button"
+              onClick={() => addSource()}
+              disabled={!newSource.trim()}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#1D4ED8] text-white text-sm font-bold rounded-xl hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Plus size={15} />
+              Add
+            </button>
+          </div>
+
+          <p className="text-xs text-[#94A3B8] px-1">
+            Saving updates all dropdowns across the CRM — lead filters, detail page, and manual lead form. Leads already using a removed source keep it untouched.
+          </p>
+        </>
+      )}
     </div>
   )
 }
@@ -1625,58 +1939,143 @@ const renderRoutingSection = () => (
     </SectionShell>
   )
 
-  const renderFeaturesSection = () => (
-    <SectionShell
-      title="Feature Controls"
-      description="Control the live modules your team can access across BuildFlow."
-    >
-      <div className="space-y-4">
-        {featureError ? (
-          <div className="px-4 py-3 rounded-2xl border border-[#FECACA] bg-[#FEF2F2] text-sm font-medium text-[#B91C1C]">
-            {featureError}
+  const renderFeaturesSection = () => {
+    type ToggleGroup = {
+      group: string
+      description: string
+      color: string
+      items: { key: keyof FeatureControls; label: string; desc: string; badge?: string }[]
+    }
+    const groups: ToggleGroup[] = [
+      {
+        group: 'Lead Management',
+        description: 'Control how leads flow into and through the CRM.',
+        color: '#1D4ED8',
+        items: [
+          { key: 'manualAssignment', label: 'Manual Assignment', desc: 'Keep new leads under manager control until someone assigns or transfers them.' },
+          { key: 'autoQueueing', label: 'Auto Queueing', desc: 'Automatically queue incoming leads for representatives to accept and work on.' },
+          { key: 'duplicateDetection', label: 'Duplicate Detection', desc: 'Block or flag leads with duplicate phone numbers on import and manual entry.' },
+          { key: 'exportLeads', label: 'Export Leads', desc: 'Allow managers to export lead data as CSV or Excel from the leads list.' },
+          { key: 'bulkEdit', label: 'Bulk Edit', desc: 'Enable bulk status updates, assignment, and deletion from the leads list.' },
+        ],
+      },
+      {
+        group: 'Calling & Recording',
+        description: 'Toggle Exotel calling features for your team.',
+        color: '#7C3AED',
+        items: [
+          { key: 'dialer', label: 'Dialer', desc: 'Turn outbound calling on or off across the sidebar, dialer page, and lead workspace.' },
+          { key: 'callRecording', label: 'Call Recordings', desc: 'Allow recording playback and recording request buttons inside BuildFlow.' },
+        ],
+      },
+      {
+        group: 'Messaging & Notifications',
+        description: 'Control SMS, WhatsApp, and follow-up reminder features.',
+        color: '#EA580C',
+        items: [
+          { key: 'smsEnabled', label: 'SMS', desc: 'Enable sending SMS messages to leads directly from the lead detail page.', badge: 'Requires Exotel SMS' },
+          { key: 'whatsappEnabled', label: 'WhatsApp', desc: 'Enable WhatsApp messaging integration for lead communication.', badge: 'Requires Integration' },
+          { key: 'followUpReminders', label: 'Follow-up Reminders', desc: 'Show follow-up due popups to representatives when a follow-up is scheduled.' },
+        ],
+      },
+      {
+        group: 'Access & Visibility',
+        description: 'Control what representatives can see and do.',
+        color: '#16A34A',
+        items: [
+          { key: 'analyticsAccess', label: 'Analytics Access', desc: 'Allow representatives to view analytics and performance dashboards.' },
+          { key: 'auditLog', label: 'Audit Log', desc: 'Show the audit log section to managers for tracking all CRM activity.' },
+          { key: 'representativeCanDelete', label: 'Rep Can Delete Leads', desc: 'Allow representatives to delete leads. Disabled by default for data safety.', badge: 'Caution' },
+        ],
+      },
+    ]
+
+    return (
+      <div className="space-y-5">
+        {/* Sticky save bar */}
+        <div className="sticky top-0 z-20 -mx-1 px-1 py-3 bg-white/95 backdrop-blur-md border-b border-[#E2E8F0] flex items-center justify-between gap-4 shadow-sm">
+          <div>
+            <h2 className="text-sm font-bold text-[#0F172A]">Feature Controls</h2>
+            <p className="text-xs text-[#94A3B8]">Toggle every module and permission your team can access across BuildFlow.</p>
           </div>
+          <button
+            type="button"
+            onClick={handleSaveFeatures}
+            disabled={featureSaving}
+            className={`shrink-0 inline-flex items-center gap-2 px-5 py-2 rounded-xl font-bold text-sm active:scale-95 transition-all shadow-md ${
+              featureSaving ? 'bg-[#CBD5E1] text-white cursor-not-allowed shadow-none' : saved ? 'bg-[#16A34A] text-white shadow-green-200' : 'bg-[#1D4ED8] text-white shadow-blue-200 hover:bg-blue-700'
+            }`}
+          >
+            {featureSaving ? (
+              <><svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>Saving…</>
+            ) : saved ? (
+              <><Check size={14} />Saved</>
+            ) : (
+              <><Check size={14} />Save Controls</>
+            )}
+          </button>
+        </div>
+
+        {featureError ? (
+          <div className="px-4 py-3 rounded-2xl border border-[#FECACA] bg-[#FEF2F2] text-sm font-semibold text-[#B91C1C]">{featureError}</div>
         ) : null}
 
-        <div className="bg-white rounded-2xl border border-[#E2E8F0] divide-y divide-[#F1F5F9]">
-          {renderFeatureToggle(
-            'manualAssignment',
-            'Manual Assignment',
-            'Keep new leads under manager control until someone assigns or transfers them.'
-          )}
-          {renderFeatureToggle(
-            'dialer',
-            'Dialer',
-            'Turn outbound calling on or off across the sidebar, dialer page, and lead workspace.'
-          )}
-          {renderFeatureToggle(
-            'callRecording',
-            'Call Recordings',
-            'Allow recording playback and recording requests for Exotel calls inside BuildFlow.'
-          )}
+        {/* Active summary pills */}
+        <div className="flex flex-wrap gap-2">
+          {(Object.keys(featureControls) as (keyof FeatureControls)[]).filter(k => featureControls[k]).map(k => {
+            const label = groups.flatMap(g => g.items).find(i => i.key === k)?.label || k
+            return (
+              <span key={k} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#F0FDF4] border border-[#BBF7D0] text-[#16A34A]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A]" />
+                {label}
+              </span>
+            )
+          })}
         </div>
 
-        <div className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] px-5 py-4">
-          <p className="text-sm font-semibold text-[#0F172A]">Current app behavior</p>
-          <ul className="mt-2 space-y-1 text-sm text-[#475569]">
-            <li>{featureControls.manualAssignment ? 'Manual lead assignment is active.' : 'Manual lead assignment is turned off.'}</li>
-            <li>{featureControls.dialer ? 'Dialer navigation and call placement are enabled.' : 'Dialer navigation and call placement are disabled.'}</li>
-            <li>{featureControls.callRecording ? 'Recording playback is available in call-facing screens.' : 'Recording playback is hidden and blocked.'}</li>
-          </ul>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleSaveFeatures}
-          disabled={featureSaving}
-          className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold ${
-            featureSaving ? 'bg-[#CBD5E1] text-white cursor-not-allowed' : saved ? 'bg-[#16A34A] text-white' : 'bg-[#1D4ED8] text-white'
-          }`}
-        >
-          {featureSaving ? 'Saving...' : saved ? <><Check size={14} /> Saved</> : 'Save Feature Controls'}
-        </button>
+        {/* Groups */}
+        {groups.map(group => (
+          <div key={group.group} className="space-y-2">
+            <div className="flex items-center gap-2 px-1">
+              <div className="w-1 h-3 rounded-full" style={{ background: group.color }} />
+              <div>
+                <p className="text-xs font-bold text-[#0F172A]">{group.group}</p>
+                <p className="text-[10px] text-[#94A3B8]">{group.description}</p>
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl border border-[#E2E8F0] divide-y divide-[#F8FAFC] overflow-hidden">
+              {group.items.map(({ key, label, desc, badge }) => {
+                const enabled = featureControls[key]
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => handleFeatureToggle(key)}
+                    className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-[#F8FAFC] transition-colors group"
+                  >
+                    <div className="flex-1 min-w-0 pr-4">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold text-[#0F172A]">{label}</p>
+                        {badge && (
+                          <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${
+                            badge === 'Caution' ? 'bg-[#FEF2F2] text-[#DC2626]' : 'bg-[#F1F5F9] text-[#64748B]'
+                          }`}>{badge}</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-[#94A3B8] mt-0.5">{desc}</p>
+                    </div>
+                    <div className={`relative shrink-0 w-11 h-6 rounded-full transition-colors duration-200 ${enabled ? 'bg-[#1D4ED8]' : 'bg-[#E2E8F0]'}`}>
+                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-200 ${enabled ? 'left-6' : 'left-1'}`} />
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ))}
       </div>
-    </SectionShell>
-  )
+    )
+  }
 
   const renderSecuritySection = () => (
     <SectionShell
@@ -1928,6 +2327,8 @@ const renderRoutingSection = () => (
         return <LeadFieldsSection onSave={handleSave} />
       case 'cities':
         return <CitiesSection onSave={handleSave} />
+      case 'sources':
+        return <SourcesSection onSave={handleSave} />
       case 'features':
         return renderFeaturesSection()
       case 'sms-templates':
