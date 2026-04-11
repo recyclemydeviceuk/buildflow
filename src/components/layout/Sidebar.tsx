@@ -209,9 +209,11 @@ export default function Sidebar({ role }: SidebarProps) {
     if (!user || resettingCallStatus) return
     try {
       setResettingCallStatus(true)
-      // Force-reset this user's status to available in the DB
+      // Step 1: Directly set available + clear activeCallSid in DB for this user
       await settingsAPI.updateMyProfile({ callAvailabilityStatus: 'available' })
+      // Step 2: Reconcile catches any residual activeCallSid not cleared by step 1
       await callsAPI.reconcileStatuses()
+      // Step 3: Refresh local user state from DB so sidebar updates immediately
       await refreshUser()
     } catch (err) {
       console.error('Failed to reset call status:', err)
@@ -339,7 +341,7 @@ export default function Sidebar({ role }: SidebarProps) {
               <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: sm.dot }} />
               <span className="text-[10px] font-semibold" style={{ color: sm.text }}>{sm.label}</span>
             </div>
-            {status === 'in-call' && (
+            {(status === 'in-call' || status === 'dialing') && (
               <button
                 onClick={handleResetCallStatus}
                 disabled={resettingCallStatus}
