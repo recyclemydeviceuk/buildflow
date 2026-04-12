@@ -59,6 +59,7 @@ export interface InitiateCallPayload {
   representativeId?: string
   agentPhone?: string
   recordCall?: boolean
+  useAlternatePhone?: boolean
 }
 
 export interface CallsResponse {

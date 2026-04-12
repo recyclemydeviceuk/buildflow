@@ -491,7 +491,7 @@ export default function Dialer() {
     }
   }
 
-  const startLeadCall = async () => {
+  const startLeadCall = async (useAlternatePhone = false) => {
     if (!selectedLead) return
 
     await placeCall(
@@ -499,6 +499,7 @@ export default function Dialer() {
         leadId: selectedLead._id,
         representativeId: selectedRepresentativeId || undefined,
         recordCall,
+        useAlternatePhone,
       }
     )
   }
@@ -655,7 +656,18 @@ export default function Dialer() {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-bold text-[#0F172A]">{selectedLead.name}</p>
-                          <p className="text-xs text-[#64748B] mt-1">{selectedLead.phone}</p>
+                          <div className="flex flex-col gap-0.5 mt-1">
+                            <p className="text-xs text-[#64748B]">
+                              <span className="text-[9px] font-bold text-[#94A3B8] uppercase tracking-wide mr-1">Primary</span>
+                              {selectedLead.phone}
+                            </p>
+                            {selectedLead.alternatePhone && (
+                              <p className="text-xs text-[#64748B]">
+                                <span className="text-[9px] font-bold text-[#94A3B8] uppercase tracking-wide mr-1">Alternate</span>
+                                {selectedLead.alternatePhone}
+                              </p>
+                            )}
+                          </div>
                           <p className="text-xs text-[#94A3B8] mt-1">
                             {selectedLead.city} • {selectedLead.source} • {selectedLead.disposition}
                           </p>
@@ -668,14 +680,26 @@ export default function Dialer() {
                         </button>
                       </div>
 
-                      <button
-                        onClick={startLeadCall}
-                        disabled={!canPlaceCall || !selectedLead}
-                        className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 bg-[#1D4ED8] text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Phone size={15} />
-                        Call Lead
-                      </button>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          onClick={() => startLeadCall(false)}
+                          disabled={!canPlaceCall || !selectedLead}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#1D4ED8] text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Phone size={13} />
+                          Call Primary
+                        </button>
+                        {selectedLead.alternatePhone && (
+                          <button
+                            onClick={() => startLeadCall(true)}
+                            disabled={!canPlaceCall || !selectedLead}
+                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#0F172A] text-white text-xs font-bold rounded-lg hover:bg-[#1E293B] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Phone size={13} />
+                            Call Alternate
+                          </button>
+                        )}
+                      </div>
                       <button
                         onClick={() => setReminderContext({
                           leadId: selectedLead._id,
@@ -704,7 +728,12 @@ export default function Dialer() {
                             className="w-full text-left px-3 py-3 rounded-xl bg-white border border-[#E2E8F0] hover:border-[#BFDBFE] hover:bg-[#EFF6FF] transition-all"
                           >
                             <p className="text-sm font-bold text-[#0F172A]">{lead.name}</p>
-                            <p className="text-xs text-[#64748B] mt-1">{lead.phone}</p>
+                            <p className="text-xs text-[#64748B] mt-0.5">{lead.phone}</p>
+                            {lead.alternatePhone && (
+                              <p className="text-[10px] text-[#94A3B8] mt-0.5">
+                                <span className="font-bold">Alt:</span> {lead.alternatePhone}
+                              </p>
+                            )}
                           </button>
                         ))
                       ) : (

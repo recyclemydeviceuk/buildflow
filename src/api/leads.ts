@@ -30,6 +30,7 @@ export interface Lead {
   _id: string
   name: string
   phone: string
+  alternatePhone?: string | null
   email?: string | null
   city: string
   source: string
@@ -52,7 +53,7 @@ export interface Lead {
   owner?: string | null
   ownerName?: string | null
   budget?: string | null
-  plotSize?: number | null
+  plotSize?: string | number | null
   plotSizeUnit?: string | null
   plotOwned?: boolean | null
   buildType?: string | null
@@ -111,7 +112,7 @@ export interface LeadFiltersResponse {
 
 export interface PhoneLeadLookupItem {
   exists: boolean
-  lead: Pick<Lead, '_id' | 'name' | 'phone' | 'city' | 'source' | 'disposition'> | null
+  lead: Pick<Lead, '_id' | 'name' | 'phone' | 'alternatePhone' | 'city' | 'source' | 'disposition'> | null
 }
 
 export interface PhoneLeadLookupResponse {

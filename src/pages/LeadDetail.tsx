@@ -177,6 +177,8 @@ export default function LeadDetail() {
   const [micState, setMicState] = useState<MicState>('idle')
   const [editableName, setEditableName] = useState('')
   const [editablePhone, setEditablePhone] = useState('')
+  const [editableAlternatePhone, setEditableAlternatePhone] = useState('')
+  const [dialingAlternate, setDialingAlternate] = useState(false)
   const [editableCreatedAt, setEditableCreatedAt] = useState('')
   const [createdAtEditorKey, setCreatedAtEditorKey] = useState(0)
   const [isDeletingLead, setIsDeletingLead] = useState(false)
@@ -334,6 +336,7 @@ export default function LeadDetail() {
         setTotalCollection(res.data.totalCollection || '')
         setEditableName(res.data.name || '')
         setEditablePhone(res.data.phone || '')
+        setEditableAlternatePhone(res.data.alternatePhone || '')
         setEditableCreatedAt(formatDateTimeLocalInput(res.data.createdAt))
         setSelectedNoteStatus((current) => current || res.data.disposition)
       }
@@ -526,6 +529,7 @@ export default function LeadDetail() {
         setLead(res.data)
         setEditableName(res.data.name || '')
         setEditablePhone(res.data.phone || '')
+        setEditableAlternatePhone(res.data.alternatePhone || '')
         setEditableCreatedAt(formatDateTimeLocalInput(res.data.createdAt))
       }
     } catch (err) {
@@ -553,7 +557,11 @@ export default function LeadDetail() {
   }
 
   const appendPhoneDigit = (digit: string) => {
-    setEditablePhone((current) => `${current}${digit}`)
+    if (dialingAlternate) {
+      setEditableAlternatePhone((current) => `${current}${digit}`)
+    } else {
+      setEditablePhone((current) => `${current}${digit}`)
+    }
   }
 
   const deleteLastPhoneDigit = () => {
@@ -568,6 +576,16 @@ export default function LeadDetail() {
       return
     }
     await handleSaveQualification('phone', nextPhone)
+  }
+
+  const saveAlternatePhone = async () => {
+    const nextPhone = editableAlternatePhone.trim()
+    const currentPhone = lead?.alternatePhone?.trim() || ''
+    if (nextPhone === currentPhone) {
+      setEditableAlternatePhone(lead?.alternatePhone || '')
+      return
+    }
+    await handleSaveQualification('alternatePhone', nextPhone || null)
   }
 
   const saveCreatedAt = async () => {
@@ -712,6 +730,7 @@ export default function LeadDetail() {
         leadId: id!,
         representativeId: selectedRepresentativeId,
         recordCall: featureControls.callRecording,
+        useAlternatePhone: dialingAlternate,
       })
       if (res.success) {
         setActiveCall(res.data)
@@ -826,11 +845,14 @@ export default function LeadDetail() {
     featureControls.dialer &&
     Boolean(selectedCallingMember?.phone) &&
     !['offline', 'in-call'].includes(selectedCallingMember?.callAvailabilityStatus || '') &&
-    !selectedCallingMember?.activeCallSid
+    !selectedCallingMember?.activeCallSid &&
+    (dialingAlternate ? Boolean(lead.alternatePhone) : Boolean(lead.phone))
 
   const callActionLabel = !canPlaceCall
     ? !featureControls.dialer
       ? 'Dialer disabled'
+      : dialingAlternate && !lead.alternatePhone
+      ? 'No alternate number'
       : user?.role === 'manager' && !user?.phone && !lead.owner
       ? 'Assign a rep to call'
       : 'Device not available'
@@ -1685,13 +1707,35 @@ export default function LeadDetail() {
                   <h3 className="text-[11px] font-bold text-[#0F172A]">Dialer</h3>
                   {isLeadOwner && (
                     <button
-                      onClick={savePhoneNumber}
-                      disabled={!editablePhone.trim() || editablePhone.trim() === (lead.phone || '').trim()}
+                      onClick={dialingAlternate ? saveAlternatePhone : savePhoneNumber}
+                      disabled={
+                        dialingAlternate
+                          ? editableAlternatePhone.trim() === (lead.alternatePhone || '').trim()
+                          : !editablePhone.trim() || editablePhone.trim() === (lead.phone || '').trim()
+                      }
                       className="px-2.5 py-1 rounded-md bg-[#0F172A] text-white text-[9px] font-bold hover:bg-[#1E293B] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       Save
                     </button>
                   )}
+                </div>
+
+                {/* Primary / Alternate phone tabs */}
+                <div className="flex gap-1 mb-2 px-1">
+                  <button
+                    type="button"
+                    onClick={() => setDialingAlternate(false)}
+                    className={`flex-1 py-1 rounded-md text-[9px] font-bold transition-all ${!dialingAlternate ? 'bg-[#1D4ED8] text-white' : 'bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]'}`}
+                  >
+                    Primary
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDialingAlternate(true)}
+                    className={`flex-1 py-1 rounded-md text-[9px] font-bold transition-all ${dialingAlternate ? 'bg-[#1D4ED8] text-white' : 'bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]'}`}
+                  >
+                    Alternate
+                  </button>
                 </div>
 
                 {/* Representative Selector for Managers */}
@@ -1742,17 +1786,20 @@ export default function LeadDetail() {
                     ) : (
                       <>
                         <input
-                          value={editablePhone}
-                          onChange={(e) => handlePhoneInputChange(e.target.value)}
-                          onBlur={savePhoneNumber}
-                          placeholder={phoneField?.placeholder || 'Number...'}
+                          value={dialingAlternate ? editableAlternatePhone : editablePhone}
+                          onChange={(e) => {
+                            const cleaned = e.target.value.replace(/[^0-9+*#()\-\s]/g, '')
+                            dialingAlternate ? setEditableAlternatePhone(cleaned) : setEditablePhone(cleaned)
+                          }}
+                          onBlur={dialingAlternate ? saveAlternatePhone : savePhoneNumber}
+                          placeholder={dialingAlternate ? 'Alternate number...' : (phoneField?.placeholder || 'Number...')}
                           className="w-full bg-transparent border-none p-0 text-center text-sm leading-none tracking-tight font-bold text-[#0F172A] placeholder:text-[#CBD5E1] focus:outline-none"
                           inputMode="tel"
                         />
                         <div className="mt-1 flex items-center gap-2">
-                          <button type="button" onClick={() => setEditablePhone('')} className="text-[8px] font-bold text-[#64748B] hover:text-[#0F172A]">Clear</button>
+                          <button type="button" onClick={() => dialingAlternate ? setEditableAlternatePhone('') : setEditablePhone('')} className="text-[8px] font-bold text-[#64748B] hover:text-[#0F172A]">Clear</button>
                           <div className="w-px h-2 bg-[#E2E8F0]" />
-                          <button type="button" onClick={deleteLastPhoneDigit} className="text-[8px] font-bold text-[#64748B] hover:text-[#0F172A]">Back</button>
+                          <button type="button" onClick={() => dialingAlternate ? setEditableAlternatePhone(p => p.slice(0, -1)) : deleteLastPhoneDigit()} className="text-[8px] font-bold text-[#64748B] hover:text-[#0F172A]">Back</button>
                         </div>
                       </>
                     )}

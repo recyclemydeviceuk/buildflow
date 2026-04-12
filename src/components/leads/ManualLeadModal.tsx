@@ -50,6 +50,7 @@ export default function ManualLeadModal({
     name: initialValues?.name || '',
     email: '',
     phone: initialValues?.phone || '',
+    alternatePhone: '',
     city: initialValues?.city || defaultCity,
     source: sources.find((source) => source === 'Manual') || sources[0] || 'Manual',
     campaign: '',
@@ -72,6 +73,7 @@ export default function ManualLeadModal({
       name: form.name,
       email: form.email || null,
       phone: form.phone,
+      alternatePhone: form.alternatePhone.trim() || null,
       city: form.city,
       source: form.source,
       budget: form.budget || null,
@@ -301,6 +303,19 @@ export default function ManualLeadModal({
           <div className="grid grid-cols-1 gap-2.5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
               {coreFields.map(renderField)}
+            </div>
+            <div className="group">
+              <label className={fieldLabelClass}>Alternate Phone</label>
+              <div className="relative">
+                <Phone size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94A3B8] group-hover:text-[#1D4ED8] transition-colors pointer-events-none" />
+                <input
+                  type="tel"
+                  value={form.alternatePhone}
+                  onChange={(e) => updateForm('alternatePhone', e.target.value.replace(/[^0-9+\-\s()]/g, ''))}
+                  placeholder="Alternate contact number..."
+                  className={selectWithIconClass}
+                />
+              </div>
             </div>
           </div>
 
