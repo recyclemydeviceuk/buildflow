@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, MapPin, ChevronRight, ArrowUpDown, X, Plus, ChevronLeft, RefreshCw, Trash2, ToggleLeft, ToggleRight, Loader2, Download, User } from 'lucide-react'
+import { Search, MapPin, ChevronRight, ArrowUpDown, X, Plus, ChevronLeft, RefreshCw, Trash2, ToggleLeft, ToggleRight, Loader2, Download, User, ChevronDown, Clock, CalendarDays } from 'lucide-react'
 import { leadsAPI, type Lead } from '../api/leads'
 import type { LeadFieldConfig } from '../api/settings'
 import { callsAPI } from '../api/calls'
@@ -133,6 +133,9 @@ export default function LeadList() {
   const [createdAtDraft, setCreatedAtDraft] = useState('')
   const [createdAtEditorVersion, setCreatedAtEditorVersion] = useState(0)
   const [savingCreatedAtLeadId, setSavingCreatedAtLeadId] = useState<string | null>(null)
+  const [dateMode, setDateMode] = useState<'updatedAt' | 'createdAt'>('updatedAt')
+  const [dateModeDropdownOpen, setDateModeDropdownOpen] = useState(false)
+  const dateModeDropdownRef = useRef<HTMLDivElement>(null)
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [bulkUpdating, setBulkUpdating] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -415,6 +418,16 @@ export default function LeadList() {
     container.addEventListener('scroll', onScroll)
     return () => container.removeEventListener('scroll', onScroll)
   }, [paginationMode, handleScroll])
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dateModeDropdownRef.current && !dateModeDropdownRef.current.contains(e.target as Node)) {
+        setDateModeDropdownOpen(false)
+      }
+    }
+    if (dateModeDropdownOpen) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [dateModeDropdownOpen])
 
   const fetchFilters = async () => {
     try {
@@ -956,12 +969,61 @@ export default function LeadList() {
                     className="h-3.5 w-3.5 rounded border-[#CBD5E1] text-[#1D4ED8] focus:ring-[#1D4ED8]"
                   />
                 </th>
-                {['Lead', 'Source', 'City', 'Owner', 'Disposition', 'Created At', isManager ? 'Actions' : '', ''].filter(Boolean).map((heading) => (
+                {['Lead', 'Source', 'City', 'Owner', 'Disposition', 'DATE', isManager ? 'Actions' : '', ''].filter(Boolean).map((heading) => (
                   <th
                     key={heading}
                     className="px-3 py-2.5 text-left text-[9px] font-bold text-[#94A3B8] uppercase tracking-wider whitespace-nowrap"
                   >
-                    {heading && heading !== 'Actions' ? (
+                    {heading === 'DATE' ? (
+                      <div className="flex items-center gap-1.5">
+                        <div ref={dateModeDropdownRef} className="relative">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setDateModeDropdownOpen((o) => !o) }}
+                            className="flex items-center gap-1 px-2 py-1 rounded-md bg-[#EFF6FF] border border-[#BFDBFE] text-[#1D4ED8] text-[9px] font-bold uppercase tracking-wider hover:bg-[#DBEAFE] transition-colors"
+                          >
+                            {dateMode === 'updatedAt'
+                              ? <><Clock size={9} className="shrink-0" /> Last Edit</>
+                              : <><CalendarDays size={9} className="shrink-0" /> Created At</>
+                            }
+                            <ChevronDown size={9} className={`shrink-0 transition-transform duration-150 ${dateModeDropdownOpen ? 'rotate-180' : ''}`} />
+                          </button>
+
+                          {dateModeDropdownOpen && (
+                            <div className="absolute top-full left-0 mt-1.5 w-36 bg-white border border-[#E2E8F0] rounded-xl shadow-lg z-50 overflow-hidden">
+                              <div className="px-2.5 py-1.5 border-b border-[#F1F5F9]">
+                                <p className="text-[8px] font-bold text-[#94A3B8] uppercase tracking-wider">Show date</p>
+                              </div>
+                              <div className="p-1">
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setDateMode('updatedAt'); setDateModeDropdownOpen(false) }}
+                                  className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[10px] font-semibold transition-colors ${dateMode === 'updatedAt' ? 'bg-[#EFF6FF] text-[#1D4ED8]' : 'text-[#475569] hover:bg-[#F8FAFC]'}`}
+                                >
+                                  <Clock size={11} className="shrink-0" />
+                                  Last Edit
+                                  {dateMode === 'updatedAt' && (
+                                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#1D4ED8]" />
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setDateMode('createdAt'); setDateModeDropdownOpen(false) }}
+                                  className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[10px] font-semibold transition-colors ${dateMode === 'createdAt' ? 'bg-[#EFF6FF] text-[#1D4ED8]' : 'text-[#475569] hover:bg-[#F8FAFC]'}`}
+                                >
+                                  <CalendarDays size={11} className="shrink-0" />
+                                  Created At
+                                  {dateMode === 'createdAt' && (
+                                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#1D4ED8]" />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <ArrowUpDown size={10} className="opacity-50" />
+                      </div>
+                    ) : heading && heading !== 'Actions' ? (
                       <div className="flex items-center gap-1">
                         {heading} <ArrowUpDown size={10} className="opacity-50" />
                       </div>
@@ -1117,21 +1179,26 @@ export default function LeadList() {
                         ) : (
                           <div className="flex flex-col gap-1">
                             <div className="flex flex-col">
+                              {dateMode === 'updatedAt' && (
+                                <span className="text-[8px] font-semibold text-[#94A3B8] uppercase tracking-wide mb-0.5">
+                                  Last Edit
+                                </span>
+                              )}
                               <span className="text-[10px] font-medium text-[#475569] whitespace-nowrap">
-                                {new Date(lead.createdAt).toLocaleDateString('en-IN', {
+                                {new Date(dateMode === 'updatedAt' ? lead.updatedAt : lead.createdAt).toLocaleDateString('en-IN', {
                                   month: 'short',
                                   day: 'numeric',
                                   year: 'numeric',
                                 })}
                               </span>
                               <span className="text-[9px] text-[#94A3B8] whitespace-nowrap">
-                                {new Date(lead.createdAt).toLocaleTimeString('en-IN', {
+                                {new Date(dateMode === 'updatedAt' ? lead.updatedAt : lead.createdAt).toLocaleTimeString('en-IN', {
                                   hour: 'numeric',
                                   minute: '2-digit',
                                 })}
                               </span>
                             </div>
-                            {canEditCreatedAt ? (
+                            {canEditCreatedAt && dateMode === 'createdAt' ? (
                               <button
                                 type="button"
                                 onClick={() => startEditingCreatedAt(lead)}
