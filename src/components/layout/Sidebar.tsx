@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Bell, BarChart2,
-  FileText, Shield, Settings, Link2, BarChart3, Phone, LogOut, CalendarClock, Calculator
+  FileText, Shield, Settings, Link2, BarChart3, Phone, LogOut, CalendarClock, Calculator,
+  ChevronLeft, ChevronRight, Grid3x3
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { UserRole } from '../../App'
@@ -14,12 +15,14 @@ import { useFeatureControls } from '../../context/FeatureControlsContext'
 
 interface SidebarProps {
   role: UserRole
+  collapsed: boolean
+  onToggle: () => void
 }
 
 const managerNav = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
   { label: 'Leads', icon: Users, path: '/leads' },
-  { label: 'Dialer', icon: Phone, path: '/dialer' },
+  { label: 'Dialer', icon: Grid3x3, path: '/dialer' },
   { label: 'Call Log', icon: Phone, path: '/call-log' },
   { label: 'Follow Ups', icon: CalendarClock, path: '/follow-ups' },
   { label: 'Call Reminders', icon: Bell, path: '/reminders' },
@@ -33,7 +36,7 @@ const managerNav = [
 const repNav = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/agent' },
   { label: 'My Leads', icon: Users, path: '/leads' },
-  { label: 'Dialer', icon: Phone, path: '/dialer' },
+  { label: 'Dialer', icon: Grid3x3, path: '/dialer' },
   { label: 'Call Log', icon: Phone, path: '/call-log' },
   { label: 'Follow Ups', icon: CalendarClock, path: '/follow-ups' },
   { label: 'Call Reminders', icon: Bell, path: '/reminders' },
@@ -56,7 +59,7 @@ const getDisplayAvailability = (input?: { callAvailabilityStatus?: string | null
   return 'available'
 }
 
-export default function Sidebar({ role }: SidebarProps) {
+export default function Sidebar({ role, collapsed, onToggle }: SidebarProps) {
   const location = useLocation()
   const { user, logout, refreshUser, updateUser } = useAuth()
   const { socket, connected } = useSocket()
@@ -230,133 +233,186 @@ export default function Sidebar({ role }: SidebarProps) {
   const status = getDisplayAvailability(user)
   const sm = statusMeta[status]
 
+  const avatarInitials = user?.name?.split(' ').map(n => n[0]).join('').substring(0, 2) || (role === 'manager' ? 'M' : 'R')
+
+  // Shared label — fades + slides out when collapsing
+  const Label = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
+    <span
+      className={`whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out ${
+        collapsed ? 'opacity-0 max-w-0 ml-0' : 'opacity-100 max-w-[160px]'
+      } ${className}`}
+    >
+      {children}
+    </span>
+  )
+
+  const renderNavItem = (item: typeof navItems[0]) => {
+    const isActive =
+      location.pathname === item.path ||
+      (item.path !== '/agent' && item.path !== '/dashboard' && location.pathname.startsWith(item.path + '/'))
+    const hasBadge = item.path === '/reminders' && reminderBadgeCount > 0
+
+    return (
+      <NavLink
+        key={item.path}
+        to={item.path}
+        title={collapsed ? item.label : undefined}
+        className={`relative flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors duration-150 ${
+          isActive ? 'text-white' : 'text-[#94A3B8] hover:text-white'
+        }`}
+        style={isActive ? { background: 'rgba(59,130,246,0.12)' } : undefined}
+      >
+        {isActive && (
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-[#3B82F6] rounded-r-full" />
+        )}
+        <span className="relative shrink-0">
+          <item.icon size={17} strokeWidth={isActive ? 2.2 : 1.8} className={`transition-colors duration-150 ${isActive ? 'text-[#3B82F6]' : 'text-[#94A3B8]'}`} />
+          {hasBadge && collapsed && (
+            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#DC2626] border border-[#0B1120]" />
+          )}
+        </span>
+        <Label className="flex-1">{item.label}</Label>
+        {hasBadge && (
+          <span className={`min-w-[20px] h-5 px-1.5 bg-[#DC2626] rounded-full text-white text-[9px] font-bold flex items-center justify-center shrink-0 transition-all duration-300 ${collapsed ? 'opacity-0 scale-0 w-0 px-0 overflow-hidden' : 'opacity-100 scale-100'}`}>
+            {reminderBadgeCount}
+          </span>
+        )}
+      </NavLink>
+    )
+  }
+
   return (
-    <aside className="fixed left-0 top-0 h-full w-[200px] flex flex-col z-40" style={{ background: '#0B1120' }}>
-      {/* Brand */}
-      <div className="px-4 pt-4 pb-3">
-        <img src="https://res.cloudinary.com/desmurksp/image/upload/v1775226238/Buildflow_i2vkia.png" alt="BuildFlow" className="h-8 w-auto" />
+    <aside
+      className="fixed left-0 top-0 h-full flex flex-col z-40 overflow-hidden"
+      style={{
+        background: '#0B1120',
+        width: collapsed ? '56px' : '200px',
+        transition: 'width 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+      }}
+    >
+      {/* Brand + Toggle */}
+      <div className="flex items-center shrink-0 h-[52px] px-3 border-b border-white/[0.06]">
+        <div className={`overflow-hidden transition-all duration-300 ease-in-out ${collapsed ? 'w-0 opacity-0' : 'w-[130px] opacity-100'}`}>
+          <img
+            src="https://res.cloudinary.com/desmurksp/image/upload/v1775226238/Buildflow_i2vkia.png"
+            alt="BuildFlow"
+            className="h-7 w-auto object-contain"
+          />
+        </div>
+        <button
+          onClick={onToggle}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="flex items-center justify-center w-7 h-7 rounded-lg text-[#475569] hover:text-white hover:bg-white/10 transition-colors duration-150 shrink-0 ml-auto"
+        >
+          <span
+            className="transition-transform duration-300 ease-in-out inline-flex"
+            style={{ transform: collapsed ? 'rotate(0deg)' : 'rotate(180deg)' }}
+          >
+            <ChevronRight size={14} />
+          </span>
+        </button>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-2 space-y-0.5 overflow-y-auto">
-        {navItems.map((item) => {
-          const isActive = location.pathname === item.path ||
-            (item.path !== '/agent' && item.path !== '/dashboard' && location.pathname.startsWith(item.path + '/'))
-          return (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={`group flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 relative ${
-                isActive ? 'text-white' : 'text-[#64748B] hover:text-[#94A3B8]'
-              }`}
-              style={isActive ? { background: 'rgba(255,255,255,0.08)' } : undefined}
-            >
-              {isActive && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-[#3B82F6] rounded-r-full" />
-              )}
-              <item.icon size={14} className={isActive ? 'text-[#3B82F6]' : 'text-[#475569] group-hover:text-[#64748B]'} />
-              <span className="flex-1">{item.label}</span>
-              {item.path === '/reminders' && reminderBadgeCount > 0 ? (
-                <span className="min-w-[20px] h-5 px-1.5 bg-[#DC2626] rounded-full text-white text-[9px] font-bold flex items-center justify-center">
-                  {reminderBadgeCount}
-                </span>
-              ) : null}
-            </NavLink>
-          )
-        })}
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-2 space-y-0.5">
+        {navItems.map(renderNavItem)}
       </nav>
 
-      {/* EMI Calculator shortcut */}
-      <div className="px-2 pb-1 border-t border-white/[0.06] pt-2">
+      {/* EMI Calculator */}
+      <div className="border-t border-white/[0.06] pt-1.5 pb-1 px-2">
         <NavLink
           to="/emi-calculator"
-          className={`group flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 relative ${
-            location.pathname === '/emi-calculator' ? 'text-white' : 'text-[#64748B] hover:text-[#94A3B8]'
+          title={collapsed ? 'EMI Calculator' : undefined}
+          className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors duration-150 ${
+            location.pathname === '/emi-calculator' ? 'text-white' : 'text-[#94A3B8] hover:text-white'
           }`}
-          style={location.pathname === '/emi-calculator' ? { background: 'rgba(255,255,255,0.08)' } : undefined}
+          style={location.pathname === '/emi-calculator' ? { background: 'rgba(59,130,246,0.12)' } : undefined}
         >
-          {location.pathname === '/emi-calculator' && (
-            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-[#3B82F6] rounded-r-full" />
-          )}
           <div
             className="w-[18px] h-[18px] rounded-md flex items-center justify-center shrink-0"
             style={{ background: location.pathname === '/emi-calculator' ? 'rgba(59,130,246,0.25)' : 'rgba(59,130,246,0.12)' }}
           >
             <Calculator size={11} className="text-[#3B82F6]" />
           </div>
-          <span className="flex-1">EMI Calculator</span>
+          <Label className="flex-1">EMI Calculator</Label>
         </NavLink>
       </div>
 
-      {/* Settings */}
-      <div className="px-2 pb-1.5 border-t border-white/[0.06] pt-2">
+      {/* Settings + Sign Out */}
+      <div className="border-t border-white/[0.06] pt-1.5 pb-2 px-2">
         <NavLink
           to="/settings"
-          className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 ${
-            location.pathname === '/settings' ? 'text-white bg-white/[0.08]' : 'text-[#64748B] hover:text-[#94A3B8]'
+          title={collapsed ? 'Settings' : undefined}
+          className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors duration-150 ${
+            location.pathname === '/settings' ? 'text-white' : 'text-[#94A3B8] hover:text-white'
           }`}
+          style={location.pathname === '/settings' ? { background: 'rgba(59,130,246,0.12)' } : undefined}
         >
-          <Settings size={14} className={location.pathname === '/settings' ? 'text-[#3B82F6]' : 'text-[#475569]'} />
-          <span>Settings</span>
+          <Settings size={17} strokeWidth={location.pathname === '/settings' ? 2.2 : 1.8} className={`transition-colors duration-150 ${location.pathname === '/settings' ? 'text-[#3B82F6]' : 'text-[#94A3B8]'}`} />
+          <Label>Settings</Label>
         </NavLink>
         <button
           onClick={logout}
-          className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#64748B] hover:text-[#DC2626] hover:bg-red-500/10 transition-all duration-150 mt-0.5"
+          title={collapsed ? 'Sign Out' : undefined}
+          className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#94A3B8] hover:text-[#EF4444] hover:bg-red-500/10 transition-colors duration-150 mt-0.5"
         >
-          <LogOut size={14} />
-          <span>Sign Out</span>
+          <LogOut size={17} strokeWidth={1.8} className="shrink-0" />
+          <Label>Sign Out</Label>
         </button>
       </div>
 
       {/* User card */}
-      <div className="px-3 pt-2.5 pb-3 border-t border-white/[0.06]">
-        <div className="flex items-center gap-2.5 mb-2">
+      <div className="border-t border-white/[0.06] px-3 pt-2.5 pb-3">
+        <div className="flex items-center gap-2.5">
           <div className="relative shrink-0">
             {user?.avatarUrl ? (
               <img src={user.avatarUrl} alt={user.name} className="w-7 h-7 rounded-lg object-cover border border-white/10" />
             ) : (
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-[10px] font-bold"
-                style={{ background: 'linear-gradient(135deg, #1D4ED8, #3B82F6)' }}>
-                {user?.name?.split(' ').map(n => n[0]).join('').substring(0, 2) || (role === 'manager' ? 'M' : 'R')}
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                style={{ background: 'linear-gradient(135deg,#1D4ED8,#3B82F6)' }}>
+                {avatarInitials}
               </div>
             )}
+            <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-[#0B1120]" style={{ background: sm.dot }} />
           </div>
-          <div className="flex-1 min-w-0">
+          <div className={`overflow-hidden transition-all duration-300 ease-in-out ${collapsed ? 'w-0 opacity-0' : 'w-full opacity-100'}`}>
             <p className="text-white text-[11px] font-semibold truncate">{user?.name || (role === 'manager' ? 'Manager' : 'Representative')}</p>
             <p className="text-[#475569] text-[9px] truncate capitalize">{role}</p>
           </div>
         </div>
 
-        {/* Availability toggle — representative only */}
-        {user?.phone && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-semibold text-[#64748B]">Availability</span>
-              <button
-                onClick={handleToggle}
-                disabled={status === 'dialing' || status === 'in-call' || availabilityUpdating}
-                className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${
-                  status === 'offline' ? 'bg-[#334155]' : status === 'available' ? 'bg-[#16A34A]' : 'bg-[#F59E0B]'
-                } ${status === 'dialing' || status === 'in-call' || availabilityUpdating ? 'opacity-60 cursor-not-allowed' : ''}`}
-              >
-                <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${status === 'offline' ? 'left-0.5' : 'left-4'}`} />
-              </button>
+        {/* Availability — only in expanded */}
+        <div className={`overflow-hidden transition-all duration-300 ease-in-out ${collapsed ? 'max-h-0 opacity-0 mt-0' : 'max-h-40 opacity-100 mt-2'}`}>
+          {user?.phone && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold text-[#64748B]">Availability</span>
+                <button
+                  onClick={handleToggle}
+                  disabled={status === 'dialing' || status === 'in-call' || availabilityUpdating}
+                  className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${
+                    status === 'offline' ? 'bg-[#334155]' : status === 'available' ? 'bg-[#16A34A]' : 'bg-[#F59E0B]'
+                  } ${status === 'dialing' || status === 'in-call' || availabilityUpdating ? 'opacity-60 cursor-not-allowed' : ''}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${status === 'offline' ? 'left-0.5' : 'left-4'}`} />
+                </button>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: sm.dot }} />
+                <span className="text-[10px] font-semibold" style={{ color: sm.text }}>{sm.label}</span>
+              </div>
+              {(status === 'in-call' || status === 'dialing') && (
+                <button
+                  onClick={handleResetCallStatus}
+                  disabled={resettingCallStatus}
+                  className="w-full text-[9px] font-bold px-2 py-1 rounded-md bg-[#1e2d45] border border-[#F59E0B]/40 text-[#F59E0B] hover:bg-[#F59E0B]/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {resettingCallStatus ? 'Resetting...' : 'Reset to Available'}
+                </button>
+              )}
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: sm.dot }} />
-              <span className="text-[10px] font-semibold" style={{ color: sm.text }}>{sm.label}</span>
-            </div>
-            {(status === 'in-call' || status === 'dialing') && (
-              <button
-                onClick={handleResetCallStatus}
-                disabled={resettingCallStatus}
-                className="w-full text-[9px] font-bold px-2 py-1 rounded-md bg-[#1e2d45] border border-[#F59E0B]/40 text-[#F59E0B] hover:bg-[#F59E0B]/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {resettingCallStatus ? 'Resetting...' : 'Reset to Available'}
-              </button>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </aside>
   )

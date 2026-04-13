@@ -16,6 +16,17 @@ export default function Layout() {
   const [incomingCall, setIncomingCall] = useState<Call | null>(null)
   const [followUpPopup, setFollowUpPopup] = useState<FollowUpRecord | null>(null)
   const [assignedLeadPopup, setAssignedLeadPopup] = useState<{ leadId: string; leadName?: string } | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('sidebar_collapsed') === 'true' } catch { return false }
+  })
+
+  const handleSidebarToggle = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev
+      try { localStorage.setItem('sidebar_collapsed', String(next)) } catch {}
+      return next
+    })
+  }
 
   useEffect(() => {
     if (!socket) return
@@ -138,8 +149,8 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen bg-[#F8FAFC] overflow-hidden">
-      <Sidebar role={user?.role || 'representative'} />
-      <main className="flex-1 ml-[200px] overflow-y-auto">
+      <Sidebar role={user?.role || 'representative'} collapsed={sidebarCollapsed} onToggle={handleSidebarToggle} />
+      <main className={`flex-1 overflow-y-auto transition-all duration-300 ${sidebarCollapsed ? 'ml-[56px]' : 'ml-[200px]'}`}>
         <Outlet />
       </main>
 
