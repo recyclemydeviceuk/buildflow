@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import { useAuth } from '../../context/AuthContext'
@@ -6,7 +6,17 @@ import { useSocket } from '../../context/SocketContext'
 import { useFeatureControls } from '../../context/FeatureControlsContext'
 import type { Call } from '../../api/calls'
 import { followUpsAPI, type FollowUpRecord } from '../../api/followUps'
-import { PhoneIncoming, ArrowUpRight, CalendarClock, CheckCircle2, Clock3, UserCheck } from 'lucide-react'
+import { leadsAPI } from '../../api/leads'
+import { PhoneIncoming, ArrowUpRight, CalendarClock, CheckCircle2, Clock3, UserCheck, X, Phone, MapPin } from 'lucide-react'
+
+type PendingAssignment = {
+  leadId: string
+  leadName: string
+  phone?: string
+  city?: string
+  source?: string
+  disposition?: string
+}
 
 export default function Layout() {
   const { user } = useAuth()
@@ -15,7 +25,22 @@ export default function Layout() {
   const featureControls = useFeatureControls()
   const [incomingCall, setIncomingCall] = useState<Call | null>(null)
   const [followUpPopup, setFollowUpPopup] = useState<FollowUpRecord | null>(null)
-  const [assignedLeadPopup, setAssignedLeadPopup] = useState<{ leadId: string; leadName?: string } | null>(null)
+  const [assignmentQueue, setAssignmentQueue] = useState<PendingAssignment[]>([])
+  const [assignmentResponding, setAssignmentResponding] = useState(false)
+
+  const currentAssignment = assignmentQueue[0] ?? null
+
+  const pushAssignment = useCallback((item: PendingAssignment) => {
+    setAssignmentQueue((prev) => {
+      if (prev.some((a) => a.leadId === item.leadId)) return prev
+      return [...prev, item]
+    })
+  }, [])
+
+  const popAssignment = useCallback(() => {
+    setAssignmentQueue((prev) => prev.slice(1))
+  }, [])
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return localStorage.getItem('sidebar_collapsed') === 'true' } catch { return false }
   })
@@ -28,14 +53,25 @@ export default function Layout() {
     })
   }
 
+  // Fetch any pending assignments on mount (for page reload persistence)
+  useEffect(() => {
+    if (!user?.id || user.role !== 'representative') return
+
+    leadsAPI.getPendingAssignments().then((res) => {
+      if (res.success && res.data.length) {
+        res.data.forEach(pushAssignment)
+      }
+    }).catch(() => null)
+  }, [user?.id, user?.role, pushAssignment])
+
   useEffect(() => {
     if (!socket) return
 
-    socket.on('lead:assigned', (data: { leadId: string; leadName?: string; assignedTo: string; assignedToName: string }) => {
+    const handleAssigned = (data: { leadId: string; leadName?: string; assignedTo: string; assignedToName: string }) => {
       if (data.assignedTo === user?.id) {
-        setAssignedLeadPopup({ leadId: data.leadId, leadName: data.leadName })
+        pushAssignment({ leadId: data.leadId, leadName: data.leadName || 'New Lead' })
       }
-    })
+    }
 
     const handleCallEvent = (call: Call) => {
       const representativeId = typeof call.representative === 'string' ? call.representative : String(call.representative)
@@ -48,15 +84,16 @@ export default function Layout() {
       }
     }
 
+    socket.on('lead:assigned', handleAssigned)
     socket.on('call:new', handleCallEvent)
     socket.on('call:status_updated', handleCallEvent)
 
     return () => {
-      socket.off('lead:assigned')
+      socket.off('lead:assigned', handleAssigned)
       socket.off('call:new', handleCallEvent)
       socket.off('call:status_updated', handleCallEvent)
     }
-  }, [socket, user?.id, user?.role, incomingCall?._id])
+  }, [socket, user?.id, user?.role, incomingCall?._id, pushAssignment])
 
   useEffect(() => {
     if (user?.role !== 'representative' || !featureControls.followUpReminders) {
@@ -125,6 +162,33 @@ export default function Layout() {
     }
   }, [followUpPopup, user?.role, featureControls.followUpReminders])
 
+  const handleAcceptAssignment = async () => {
+    if (!currentAssignment || assignmentResponding) return
+    try {
+      setAssignmentResponding(true)
+      await leadsAPI.respondToAssignment(currentAssignment.leadId, 'accept')
+      popAssignment()
+      navigate(`/leads/${currentAssignment.leadId}`)
+    } catch (error) {
+      console.error('Failed to accept assignment:', error)
+    } finally {
+      setAssignmentResponding(false)
+    }
+  }
+
+  const handleDeclineAssignment = async () => {
+    if (!currentAssignment || assignmentResponding) return
+    try {
+      setAssignmentResponding(true)
+      await leadsAPI.respondToAssignment(currentAssignment.leadId, 'decline')
+      popAssignment()
+    } catch (error) {
+      console.error('Failed to decline assignment:', error)
+    } finally {
+      setAssignmentResponding(false)
+    }
+  }
+
   const handleConfirmFollowUpPopup = async () => {
     if (!followUpPopup) return
 
@@ -188,40 +252,95 @@ export default function Layout() {
         </div>
       )}
 
-      {assignedLeadPopup && (
-        <div className="fixed inset-0 z-[70] bg-black/55 backdrop-blur-[6px] flex items-center justify-center p-4">
-          <div className="w-full max-w-[400px] rounded-3xl border border-[#BFDBFE] bg-white shadow-[0_30px_90px_rgba(15,23,42,0.35)] overflow-hidden">
-            <div className="px-5 py-4 bg-gradient-to-r from-[#EFF6FF] to-white border-b border-[#DBEAFE]">
-              <div className="flex items-center gap-2">
-                <UserCheck size={18} className="text-[#1D4ED8]" />
-                <p className="text-sm font-bold text-[#0F172A]">Lead Assigned To You</p>
+      {currentAssignment && (
+        /* Sticky overlay — clicking outside does nothing (no onClick on backdrop) */
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-[8px] flex items-center justify-center p-4">
+          <div className="w-full max-w-[420px] rounded-3xl border border-[#BFDBFE] bg-white shadow-[0_32px_96px_rgba(15,23,42,0.4)] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+
+            {/* Header */}
+            <div className="px-5 pt-5 pb-4 bg-gradient-to-br from-[#EFF6FF] via-[#F0F7FF] to-white border-b border-[#DBEAFE]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-[#1D4ED8] flex items-center justify-center shrink-0 shadow-sm">
+                    <UserCheck size={18} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-[#0F172A]">Lead Assigned to You</p>
+                    <p className="text-[11px] text-[#64748B] mt-0.5">You must accept or decline to continue</p>
+                  </div>
+                </div>
+                {assignmentQueue.length > 1 && (
+                  <span className="shrink-0 px-2 py-0.5 rounded-full bg-[#EFF6FF] border border-[#BFDBFE] text-[#1D4ED8] text-[10px] font-bold">
+                    {assignmentQueue.length} pending
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-[#64748B] mt-1">
-                A new lead has been assigned to you. Open it to review and accept.
-              </p>
             </div>
+
+            {/* Lead info */}
             <div className="px-5 py-4">
-              {assignedLeadPopup.leadName ? (
-                <p className="text-base font-bold text-[#0F172A]">{assignedLeadPopup.leadName}</p>
-              ) : (
-                <p className="text-sm text-[#475569]">A lead is waiting for your attention.</p>
+              <p className="text-lg font-bold text-[#0F172A] leading-snug">{currentAssignment.leadName}</p>
+
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                {currentAssignment.phone && (
+                  <span className="inline-flex items-center gap-1 text-xs text-[#475569]">
+                    <Phone size={11} className="text-[#94A3B8]" />
+                    {currentAssignment.phone}
+                  </span>
+                )}
+                {currentAssignment.city && (
+                  <span className="inline-flex items-center gap-1 text-xs text-[#475569]">
+                    <MapPin size={11} className="text-[#94A3B8]" />
+                    {currentAssignment.city}
+                  </span>
+                )}
+              </div>
+
+              {(currentAssignment.source || currentAssignment.disposition) && (
+                <div className="flex items-center gap-2 mt-2">
+                  {currentAssignment.source && (
+                    <span className="px-2 py-0.5 rounded-full bg-[#F1F5F9] text-[#475569] text-[10px] font-semibold">
+                      {currentAssignment.source}
+                    </span>
+                  )}
+                  {currentAssignment.disposition && (
+                    <span className="px-2 py-0.5 rounded-full bg-[#EFF6FF] text-[#1D4ED8] text-[10px] font-semibold border border-[#DBEAFE]">
+                      {currentAssignment.disposition}
+                    </span>
+                  )}
+                </div>
               )}
+
+              {/* Notice */}
+              <div className="mt-3 rounded-xl bg-[#FFFBEB] border border-[#FDE68A] px-3 py-2">
+                <p className="text-[11px] text-[#92400E] font-medium">
+                  This popup will stay until you respond. If you decline, the lead will be unassigned.
+                </p>
+              </div>
+
+              {/* Actions */}
               <div className="flex items-center gap-3 mt-4">
                 <button
-                  onClick={() => {
-                    navigate(`/leads/${assignedLeadPopup.leadId}`)
-                    setAssignedLeadPopup(null)
-                  }}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#1D4ED8] text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-colors"
+                  onClick={handleAcceptAssignment}
+                  disabled={assignmentResponding}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1D4ED8] text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  View Lead
-                  <ArrowUpRight size={14} />
+                  {assignmentResponding ? (
+                    <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <CheckCircle2 size={15} />
+                      Accept
+                    </>
+                  )}
                 </button>
                 <button
-                  onClick={() => setAssignedLeadPopup(null)}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 border border-[#E2E8F0] bg-white text-sm font-semibold text-[#475569] rounded-xl hover:bg-[#F8FAFC] transition-colors"
+                  onClick={handleDeclineAssignment}
+                  disabled={assignmentResponding}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-[#FECACA] bg-[#FEF2F2] text-[#DC2626] text-sm font-bold rounded-xl hover:bg-[#FEE2E2] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Dismiss
+                  <X size={15} />
+                  Decline
                 </button>
               </div>
             </div>

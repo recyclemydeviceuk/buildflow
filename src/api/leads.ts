@@ -202,6 +202,16 @@ export const leadsAPI = {
     return response.data
   },
 
+  getPendingAssignments: async (): Promise<{ success: boolean; data: Array<{ leadId: string; leadName: string; phone: string; city: string; source: string; disposition: string; assignedAt: string }> }> => {
+    const response = await client.get('/leads/pending-assignments')
+    return response.data
+  },
+
+  respondToAssignment: async (id: string, action: 'accept' | 'decline'): Promise<{ success: boolean; data: { leadId: string; action: string } }> => {
+    const response = await client.patch(`/leads/${id}/assignment-response`, { action })
+    return response.data
+  },
+
   updateDisposition: async (id: string, disposition: string, notes?: string): Promise<LeadResponse> => {
     const response = await client.patch(`/leads/${id}/disposition`, { disposition, notes })
     return response.data
