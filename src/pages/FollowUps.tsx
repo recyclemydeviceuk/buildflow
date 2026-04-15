@@ -55,10 +55,21 @@ export default function FollowUps() {
   const fetchFollowUps = async (background = false) => {
     try {
       if (!background) setLoading(true)
-      const response = await followUpsAPI.getFollowUps({ page: '1', limit: '200' })
-      if (response.success) {
-        setFollowUps(response.data)
+      // Fetch all pages so pending follow-ups aren't cut off by old completed ones
+      const allFollowUps: FollowUpRecord[] = []
+      let currentPage = 1
+      let hasMore = true
+      while (hasMore) {
+        const response = await followUpsAPI.getFollowUps({ page: String(currentPage), limit: '200' })
+        if (response.success) {
+          allFollowUps.push(...response.data)
+          hasMore = response.data.length === 200 && currentPage < (response.pagination?.pages || 1)
+          currentPage++
+        } else {
+          hasMore = false
+        }
       }
+      setFollowUps(allFollowUps)
     } catch (error) {
       console.error('Failed to fetch follow-ups:', error)
     } finally {
