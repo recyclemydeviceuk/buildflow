@@ -38,7 +38,7 @@ const EXTRA_FIELD_META: Record<
   receivedDate: { label: 'Lead Received Date', help: 'Uses the sheet date as the imported lead received date' },
   meetingType: { label: 'Meeting Type', help: 'For Meeting Done stage — sets the meeting type: VC or Client Place' },
   meetingLocation: { label: 'Meeting Location', help: 'For Meeting Done (Client Place) — stores the client location or address' },
-  failedReason: { label: 'Failed Reason', help: 'For Failed stage — reason for failure: Budget Issue, Not Interested, Location Issue, Timeline Issue, Competition, or Other' },
+  failedReason: { label: 'Failed Reason', help: 'For Failed stage — reason for failure: Budget Issue, Not Interested, Location Issue, Timeline Issue, Competition, Not Responding, Not Enquired, Invalid Number, or Other' },
 }
 
 const sampleFieldValues: Partial<Record<LeadFieldKey, string>> = {

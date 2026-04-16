@@ -1297,7 +1297,7 @@ export default function LeadDetail() {
                                 className="w-full appearance-none pl-3 pr-8 py-1.5 bg-[#FEF2F2] border border-[#FCA5A5] rounded-lg text-xs font-semibold text-[#DC2626] focus:outline-none focus:ring-2 focus:ring-red-100 focus:border-[#DC2626] transition-all cursor-pointer"
                               >
                                 <option value="">Select reason...</option>
-                                {['Budget Issue', 'Not Interested', 'Location Issue', 'Timeline Issue', 'Competition', 'Other'].map((r) => (
+                                {['Budget Issue', 'Not Interested', 'Location Issue', 'Timeline Issue', 'Competition', 'Not Responding', 'Not Enquired', 'Invalid Number', 'Other'].map((r) => (
                                   <option key={r} value={r}>{r}</option>
                                 ))}
                               </select>
