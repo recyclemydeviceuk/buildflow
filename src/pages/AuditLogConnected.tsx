@@ -110,8 +110,17 @@ function formatTimestamp(iso: string) {
   const d = new Date(iso)
   const now = new Date()
   const isToday = d.toDateString() === now.toDateString()
-  const timeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const isYesterday = d.toDateString() === yesterday.toDateString()
+
+  const timeStr = d
+    .toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    .toUpperCase()
+    .replace(/\s/g, ' ')
+
   if (isToday) return { primary: timeStr, secondary: 'Today' }
+  if (isYesterday) return { primary: timeStr, secondary: 'Yesterday' }
   return {
     primary: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
     secondary: timeStr,
@@ -332,34 +341,39 @@ export default function AuditLogConnected() {
                 const changes = extractChanges(log.before, log.after)
 
                 return (
-                  <div key={log._id}>
+                  <div key={log._id} className="group relative">
+                    {/* Left accent strip — color-coded by action type */}
+                    <div
+                      className="absolute left-0 top-3 bottom-3 w-[3px] rounded-r-full opacity-70 group-hover:opacity-100 transition-opacity"
+                      style={{ background: actionStyle.dot }}
+                    />
+
                     <button
                       type="button"
                       onClick={() => setExpandedId(expanded ? null : log._id)}
-                      className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-[#FAFCFF] transition-colors text-left"
+                      className="w-full grid grid-cols-[96px_44px_1fr_28px] gap-5 items-center px-6 py-4 hover:bg-[#FAFCFF] transition-colors text-left"
                     >
-                      {/* Timeline dot */}
-                      <div className="relative flex flex-col items-center shrink-0 w-14">
-                        <div
-                          className="w-2.5 h-2.5 rounded-full mb-1"
-                          style={{ background: actionStyle.dot }}
-                        />
-                        <p className="text-xs font-bold text-[#0F172A] leading-none">{time.primary}</p>
-                        <p className="text-[10px] text-[#94A3B8] mt-0.5 leading-none">{time.secondary}</p>
+                      {/* Col 1 — Timestamp (fixed width, no wrap) */}
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-[#0F172A] leading-tight whitespace-nowrap">
+                          {time.primary}
+                        </p>
+                        <p className="text-[11px] text-[#94A3B8] leading-tight mt-1 whitespace-nowrap">
+                          {time.secondary}
+                        </p>
                       </div>
 
-                      {/* Actor avatar */}
-                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE] text-[#1D4ED8] text-[11px] font-bold flex items-center justify-center shrink-0 ring-1 ring-[#BFDBFE]">
+                      {/* Col 2 — Avatar */}
+                      <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE] text-[#1D4ED8] text-xs font-extrabold flex items-center justify-center shrink-0 ring-1 ring-[#BFDBFE]/60 shadow-sm">
                         {getInitials(log.actorName)}
                       </div>
 
-                      {/* Main content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
+                      {/* Col 3 — Actor + action + summary */}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2.5 mb-1 flex-wrap">
                           <p className="text-sm font-bold text-[#0F172A] truncate">{log.actorName}</p>
-                          <span className="text-[10px] text-[#94A3B8]">•</span>
                           <span
-                            className="inline-flex px-2 py-0.5 rounded-full border text-[10px] font-bold"
+                            className="inline-flex px-2 py-0.5 rounded-full border text-[10px] font-bold whitespace-nowrap"
                             style={{
                               background: actionStyle.bg,
                               color: actionStyle.text,
@@ -369,39 +383,47 @@ export default function AuditLogConnected() {
                             {humanizeAction(log.action)}
                           </span>
                         </div>
-                        <p className="text-xs text-[#64748B] truncate">{summary}</p>
+                        <p className="text-xs text-[#64748B] truncate leading-relaxed">{summary}</p>
                       </div>
 
-                      {/* Expand chevron */}
-                      <div className="shrink-0 text-[#94A3B8]">
-                        {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      {/* Col 4 — Chevron */}
+                      <div className="flex items-center justify-end text-[#CBD5E1] group-hover:text-[#64748B] transition-colors">
+                        {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                       </div>
                     </button>
 
                     {/* Expanded details */}
                     {expanded && (
-                      <div className="px-5 pb-4 pt-0">
-                        <div className="ml-[72px] rounded-xl bg-[#FAFBFC] border border-[#E2E8F0] p-4">
+                      <div className="px-6 pb-5 pt-0">
+                        <div className="ml-[120px] rounded-xl bg-[#FAFBFC] border border-[#E2E8F0] p-5">
                           {changes.length > 0 ? (
                             <div>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#94A3B8] mb-2">
-                                Changes ({changes.length})
-                              </p>
-                              <div className="space-y-2">
+                              <div className="flex items-center justify-between mb-3">
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-[#94A3B8]">
+                                  Field Changes
+                                </p>
+                                <span className="text-[10px] font-semibold text-[#94A3B8]">
+                                  {changes.length} {changes.length === 1 ? 'change' : 'changes'}
+                                </span>
+                              </div>
+                              <div className="rounded-lg bg-white border border-[#E2E8F0] overflow-hidden">
+                                <div className="grid grid-cols-[140px_1fr_1fr] gap-4 px-4 py-2 bg-[#F8FAFC] border-b border-[#E2E8F0]">
+                                  <p className="text-[9px] font-bold uppercase tracking-wider text-[#94A3B8]">Field</p>
+                                  <p className="text-[9px] font-bold uppercase tracking-wider text-[#94A3B8]">Before</p>
+                                  <p className="text-[9px] font-bold uppercase tracking-wider text-[#94A3B8]">After</p>
+                                </div>
                                 {changes.map((c) => (
                                   <div
                                     key={c.key}
-                                    className="flex items-start gap-3 text-xs py-1.5 border-b border-[#F1F5F9] last:border-b-0 last:pb-0"
+                                    className="grid grid-cols-[140px_1fr_1fr] gap-4 px-4 py-2.5 border-b border-[#F1F5F9] last:border-b-0"
                                   >
-                                    <span className="font-semibold text-[#475569] shrink-0 min-w-[120px]">
-                                      {c.label}
-                                    </span>
-                                    <span className="text-[#94A3B8] line-through truncate flex-1 min-w-0">
+                                    <p className="text-xs font-semibold text-[#334155] truncate">{c.label}</p>
+                                    <p className="text-xs text-[#94A3B8] line-through break-words">
                                       {c.before || '—'}
-                                    </span>
-                                    <span className="text-[#0F172A] font-semibold truncate flex-1 min-w-0">
+                                    </p>
+                                    <p className="text-xs text-[#0F172A] font-semibold break-words">
                                       {c.after || '—'}
-                                    </span>
+                                    </p>
                                   </div>
                                 ))}
                               </div>
@@ -413,7 +435,7 @@ export default function AuditLogConnected() {
                           )}
 
                           {log.entityId && (
-                            <p className="mt-3 pt-3 border-t border-[#E2E8F0] text-[10px] text-[#94A3B8] font-mono">
+                            <p className="mt-4 pt-3 border-t border-[#E2E8F0] text-[10px] text-[#94A3B8] font-mono">
                               {log.entity} · {log.entityId}
                             </p>
                           )}
