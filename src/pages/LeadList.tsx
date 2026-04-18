@@ -791,33 +791,37 @@ export default function LeadList() {
               {paginationMode === 'on' ? 'Pagination: On' : 'Pagination: Off'}
             </button>
 
+            {/* Refresh — action button, soft blue ghost style */}
             <button
               onClick={handleRefresh}
               disabled={loading || refreshing}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-[#E2E8F0] bg-white text-xs font-semibold text-[#475569] hover:bg-[#F8FAFC] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] text-xs font-bold text-[#1D4ED8] hover:bg-[#DBEAFE] hover:border-[#93C5FD] active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
               Refresh
             </button>
 
             {paginationMode === 'on' && (
-              <div className="flex items-center gap-0.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg px-0.5 py-0.5 shadow-sm">
+              /* Pagination — dark segmented control, visually distinct from action buttons */
+              <div className="flex items-center gap-0 bg-[#0F172A] rounded-lg p-0.5 shadow-[0_1px_3px_rgba(15,23,42,0.2)]">
                 <button
                   disabled={pagination.page <= 1 || loading}
                   onClick={() => fetchLeads(pagination.page - 1)}
-                  className="w-6 h-6 flex items-center justify-center rounded text-[#64748B] hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  className="w-7 h-7 flex items-center justify-center rounded-md text-[#94A3B8] hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  aria-label="Previous page"
                 >
-                  <ChevronLeft size={13} />
+                  <ChevronLeft size={14} strokeWidth={2.5} />
                 </button>
-                <div className="px-2 text-[11px] font-semibold text-[#475569] whitespace-nowrap">
-                  <span className="text-[#0F172A] font-bold">{pagination.page}</span> / <span className="text-[#0F172A] font-bold">{pagination.pages}</span>
+                <div className="mx-0.5 px-2.5 h-7 flex items-center justify-center bg-white rounded-md text-[11px] font-bold text-[#0F172A] whitespace-nowrap min-w-[48px]">
+                  {pagination.page}<span className="mx-1 text-[#94A3B8]">/</span>{pagination.pages}
                 </div>
                 <button
                   disabled={pagination.page >= pagination.pages || loading}
                   onClick={() => fetchLeads(pagination.page + 1)}
-                  className="w-6 h-6 flex items-center justify-center rounded text-[#64748B] hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  className="w-7 h-7 flex items-center justify-center rounded-md text-[#94A3B8] hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  aria-label="Next page"
                 >
-                  <ChevronRight size={13} />
+                  <ChevronRight size={14} strokeWidth={2.5} />
                 </button>
               </div>
             )}
