@@ -1,135 +1,120 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Search, Shield } from 'lucide-react'
+import { ChevronDown, ChevronRight, Search, Shield, Clock } from 'lucide-react'
 import { auditAPI, type AuditLogRow } from '../api/audit'
 import { useAuth } from '../context/AuthContext'
 
 type RoleFilter = 'all' | 'representative' | 'manager'
 
-function stringifyCompact(value: unknown) {
-  try {
-    return JSON.stringify(value)
-  } catch {
-    return String(value)
-  }
-}
+// ───────────────────────── helpers ─────────────────────────
 
-function prettyJson(value: unknown) {
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value)
-  }
-}
+const isObjectId = (v: unknown) => typeof v === 'string' && /^[0-9a-f]{24}$/i.test(v)
+const isIsoDate = (v: unknown) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v)
+const isPlainRecord = (v: unknown): v is Record<string, unknown> =>
+  Boolean(v) && typeof v === 'object' && !Array.isArray(v)
 
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-}
+// Fields that are noise in audit summaries (IDs, timestamps, internal flags)
+const HIDDEN_FIELDS = new Set([
+  '_id',
+  '__v',
+  'id',
+  'createdAt',
+  'updatedAt',
+  'lastActivity',
+  'assignedAt',
+  'isInQueue',
+  'statusNotes',
+  'tags',
+  'websiteFormData',
+  'metaLeadId',
+  'externalId',
+  'campaignId',
+  'skipCount',
+  'isDuplicate',
+  'assignmentAcknowledged',
+  'duplicateOf',
+])
 
 function humanizeKey(key: string) {
-  if (key === '_id') return 'ID'
   return key
     .replace(/_/g, ' ')
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-function humanizeActionLabel(action: string) {
-  return action
-    .replace(/[._]/g, ' ')
-    .replace(/\b\w/g, (char) => char.toUpperCase())
+function humanizeAction(action: string) {
+  return action.replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-function humanizeValue(value: unknown): string {
-  if (value === null || value === undefined || value === '') return 'Empty'
+function formatValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—'
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
-  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : value.toFixed(2)
+  if (typeof value === 'number') return String(value)
   if (typeof value === 'string') {
-    const maybeDate = new Date(value)
-    if (!Number.isNaN(maybeDate.getTime()) && /T|\d{4}-\d{2}-\d{2}/.test(value)) {
-      return maybeDate.toLocaleString('en-IN')
+    if (isObjectId(value)) return '' // suppress ObjectId noise
+    if (isIsoDate(value)) {
+      const d = new Date(value)
+      return isNaN(d.getTime())
+        ? value
+        : d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
     }
     return value
   }
-  if (Array.isArray(value)) {
-    if (value.length === 0) return 'Empty'
-    return value.map((item) => humanizeValue(item)).join(', ')
-  }
-  if (isPlainRecord(value)) {
-    const entries = Object.entries(value)
-    if (entries.length === 0) return 'Empty object'
-    return entries
-      .slice(0, 3)
-      .map(([entryKey, entryValue]) => `${humanizeKey(entryKey)}: ${humanizeValue(entryValue)}`)
-      .join(' • ')
-  }
-  return String(value)
+  if (Array.isArray(value)) return value.length === 0 ? '—' : `${value.length} item(s)`
+  return ''
 }
 
-function snapshotEntries(value: unknown): Array<{ key: string; label: string; value: string }> {
-  if (!isPlainRecord(value)) return []
-  return Object.entries(value).map(([key, entryValue]) => ({
-    key,
-    label: humanizeKey(key),
-    value: humanizeValue(entryValue),
-  }))
+type Change = { key: string; label: string; before: string; after: string }
+
+function extractChanges(before: unknown, after: unknown): Change[] {
+  const b = isPlainRecord(before) ? before : {}
+  const a = isPlainRecord(after) ? after : {}
+  const keys = Array.from(new Set([...Object.keys(b), ...Object.keys(a)])).filter(
+    (k) => !HIDDEN_FIELDS.has(k)
+  )
+
+  const changes: Change[] = []
+  for (const key of keys) {
+    const beforeVal = formatValue(b[key])
+    const afterVal = formatValue(a[key])
+    if (beforeVal === afterVal) continue
+    if (!beforeVal && !afterVal) continue
+    changes.push({ key, label: humanizeKey(key), before: beforeVal, after: afterVal })
+  }
+  return changes
 }
 
-function buildChangeRows(before: unknown, after: unknown): Array<{
-  key: string
-  label: string
-  before: string
-  after: string
-  changed: boolean
-}> {
-  const beforeRecord = isPlainRecord(before) ? before : {}
-  const afterRecord = isPlainRecord(after) ? after : {}
-  const allKeys = Array.from(new Set([...Object.keys(beforeRecord), ...Object.keys(afterRecord)]))
+// One-line human summary for the row, generated from the top 1–2 changes
+function buildSummary(action: string, before: unknown, after: unknown, entity: string): string {
+  const changes = extractChanges(before, after)
 
-  const rows = allKeys
-    .map((key) => {
-      const beforeValue = beforeRecord[key]
-      const afterValue = afterRecord[key]
-      const changed = stringifyCompact(beforeValue) !== stringifyCompact(afterValue)
-      return {
-        key,
-        label: humanizeKey(key),
-        before: humanizeValue(beforeValue),
-        after: humanizeValue(afterValue),
-        changed,
-      }
-    })
-    .filter((row) => row.changed)
-
-  if (rows.length > 0) return rows
-
-  if (Object.keys(afterRecord).length > 0) {
-    return Object.keys(afterRecord).slice(0, 6).map((key) => ({
-      key,
-      label: humanizeKey(key),
-      before: 'Empty',
-      after: humanizeValue(afterRecord[key]),
-      changed: true,
-    }))
+  if (action.includes('created')) return `Created new ${entity.toLowerCase()}`
+  if (action.includes('deleted')) return `Deleted ${entity.toLowerCase()}`
+  if (action.includes('assigned')) {
+    const owner = changes.find((c) => c.key === 'ownerName')
+    return owner ? `Assigned to ${owner.after || owner.before}` : 'Assignment changed'
   }
+  if (action.includes('unassigned')) return `Unassigned from owner`
 
-  if (Object.keys(beforeRecord).length > 0) {
-    return Object.keys(beforeRecord).slice(0, 6).map((key) => ({
-      key,
-      label: humanizeKey(key),
-      before: humanizeValue(beforeRecord[key]),
-      after: 'Empty',
-      changed: true,
-    }))
+  if (changes.length === 0) return 'Updated record'
+  if (changes.length === 1) {
+    const c = changes[0]
+    if (!c.before || c.before === '—') return `Set ${c.label} to "${c.after}"`
+    if (!c.after || c.after === '—') return `Cleared ${c.label}`
+    return `${c.label}: ${c.before} → ${c.after}`
   }
-
-  return []
+  const top = changes[0]
+  return `${top.label}: ${top.before || '—'} → ${top.after || '—'} · +${changes.length - 1} more`
 }
 
-function formatDateParts(value: string) {
-  const date = new Date(value)
+function formatTimestamp(iso: string) {
+  const d = new Date(iso)
+  const now = new Date()
+  const isToday = d.toDateString() === now.toDateString()
+  const timeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+  if (isToday) return { primary: timeStr, secondary: 'Today' }
   return {
-    date: date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
-    time: date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    primary: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+    secondary: timeStr,
   }
 }
 
@@ -139,33 +124,29 @@ function formatRoleLabel(role?: string) {
   return role.charAt(0).toUpperCase() + role.slice(1)
 }
 
-function getRoleBadgeClasses(role?: string) {
-  switch (role) {
-    case 'manager':
-      return 'bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]'
-    case 'representative':
-      return 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]'
-    case 'admin':
-      return 'bg-[#FEF3C7] text-[#B45309] border-[#FDE68A]'
-    case 'system':
-      return 'bg-[#F3F4F6] text-[#4B5563] border-[#E5E7EB]'
-    default:
-      return 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0]'
-  }
+function getActionStyle(action: string): { dot: string; bg: string; text: string; border: string } {
+  if (action.includes('deleted') || action.includes('removed'))
+    return { dot: '#DC2626', bg: '#FEF2F2', text: '#B91C1C', border: '#FECACA' }
+  if (action.includes('created') || action.includes('added'))
+    return { dot: '#16A34A', bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0' }
+  if (action.includes('assigned'))
+    return { dot: '#7C3AED', bg: '#F5F3FF', text: '#6D28D9', border: '#DDD6FE' }
+  if (action.includes('updated') || action.includes('changed'))
+    return { dot: '#1D4ED8', bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' }
+  return { dot: '#64748B', bg: '#F8FAFC', text: '#475569', border: '#E2E8F0' }
 }
 
-function getActionBadgeClasses(action: string) {
-  if (action.includes('deleted') || action.includes('removed')) {
-    return 'bg-[#FEF2F2] text-[#DC2626] border-[#FECACA]'
-  }
-  if (action.includes('created') || action.includes('added')) {
-    return 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]'
-  }
-  if (action.includes('updated') || action.includes('changed')) {
-    return 'bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]'
-  }
-  return 'bg-[#F8FAFC] text-[#475569] border-[#E2E8F0]'
+function getInitials(name?: string | null) {
+  return String(name || '?')
+    .split(' ')
+    .filter(Boolean)
+    .map((p) => p[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
 }
+
+// ───────────────────────── component ─────────────────────────
 
 export default function AuditLogConnected() {
   const { user } = useAuth()
@@ -191,21 +172,14 @@ export default function AuditLogConnected() {
     try {
       const res = await auditAPI.getAuditLogFilters()
       if (!res.success) return
-
       setActionOptions(['All', ...res.data.actions])
       setLeadStatusOptions(['All', ...res.data.leadStatuses])
-
-      const dynamicRoleOptions = [
+      setRoleOptions([
         { value: 'all' as RoleFilter, label: 'All Roles' },
         ...res.data.roles
-          .filter((role): role is Exclude<RoleFilter, 'all'> => role === 'representative' || role === 'manager')
-          .map((role) => ({
-            value: role,
-            label: formatRoleLabel(role),
-          })),
-      ]
-
-      setRoleOptions(dynamicRoleOptions)
+          .filter((r): r is Exclude<RoleFilter, 'all'> => r === 'representative' || r === 'manager')
+          .map((r) => ({ value: r, label: formatRoleLabel(r) })),
+      ])
     } catch (error) {
       console.error('Failed to load audit filters:', error)
     }
@@ -240,242 +214,212 @@ export default function AuditLogConnected() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, filterAction, filterLeadStatus, filterRole, search, user?.id])
 
-  const urgentEmptyMessage = loading
-    ? 'Loading audit history...'
-    : 'No audit log entries match your filters.'
+  const hasRows = rows.length > 0
+
+  const selectClass =
+    'h-9 px-3 pr-8 bg-white border border-[#E2E8F0] rounded-lg text-xs text-[#475569] font-medium appearance-none bg-no-repeat bg-[right_10px_center] bg-[length:10px] cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/15 focus:border-[#1D4ED8]/50 hover:border-[#CBD5E1] transition-colors'
+  const chevronBg = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2394a3b8'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z' clip-rule='evenodd'/%3E%3C/svg%3E")`
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
-      <div className="bg-white border-b border-[#E2E8F0] px-5 py-3">
-        <div className="flex items-center justify-between mb-2.5">
-          <div>
-            <h1 className="text-base font-bold text-[#0F172A]">Audit Log</h1>
-            <p className="text-xs text-[#475569] mt-0.5">Backend-driven history of system and user actions</p>
+      {/* ── Header ── */}
+      <div className="bg-white border-b border-[#E2E8F0] px-6 py-4">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h1 className="text-lg font-extrabold text-[#0F172A] tracking-tight">Audit Log</h1>
+              <p className="text-xs text-[#64748B] mt-0.5">
+                {pagination?.total
+                  ? `${pagination.total.toLocaleString()} recorded events`
+                  : 'Backend-driven history of every action'}
+              </p>
+            </div>
+            <div
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#F0FDF4] border border-[#BBF7D0]"
+              title="All entries are cryptographically sealed and cannot be modified."
+            >
+              <Shield size={12} className="text-[#16A34A]" />
+              <span className="text-[10px] font-bold text-[#16A34A] uppercase tracking-wide">Tamper-proof</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#F0FDF4] border border-[#BBF7D0] rounded-lg">
-            <Shield size={12} className="text-[#16A34A]" />
-            <span className="text-xs font-semibold text-[#16A34A]">Tamper-proof log</span>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative flex-1 min-w-44">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
-            <input
-              value={search}
-              onChange={(event) => {
+          {/* Filters row */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative flex-1 min-w-[220px]">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
+              <input
+                value={search}
+                onChange={(e) => {
+                  setPage(1)
+                  setSearch(e.target.value)
+                }}
+                placeholder="Search by actor, entity, or action…"
+                className="w-full pl-9 pr-3 h-9 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/15 focus:border-[#1D4ED8]/50 hover:border-[#CBD5E1] transition-colors"
+              />
+            </div>
+
+            <select
+              value={filterLeadStatus}
+              onChange={(e) => {
                 setPage(1)
-                setSearch(event.target.value)
+                setFilterLeadStatus(e.target.value)
               }}
-              placeholder="Search by actor, entity, or action..."
-              className="w-full pl-8 pr-3 h-8 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/20 focus:border-[#1D4ED8]"
-            />
+              className={selectClass}
+              style={{ backgroundImage: chevronBg }}
+            >
+              {leadStatusOptions.map((s) => (
+                <option key={s} value={s}>
+                  {s === 'All' ? 'All Lead Statuses' : s}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={filterAction}
+              onChange={(e) => {
+                setPage(1)
+                setFilterAction(e.target.value)
+              }}
+              className={selectClass}
+              style={{ backgroundImage: chevronBg }}
+            >
+              {actionOptions.map((a) => (
+                <option key={a} value={a}>
+                  {a === 'All' ? 'All Actions' : humanizeAction(a)}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={filterRole}
+              onChange={(e) => {
+                setPage(1)
+                setFilterRole(e.target.value as RoleFilter)
+              }}
+              className={selectClass}
+              style={{ backgroundImage: chevronBg }}
+            >
+              {roleOptions.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
           </div>
-
-          <select
-            value={filterLeadStatus}
-            onChange={(event) => {
-              setPage(1)
-              setFilterLeadStatus(event.target.value)
-            }}
-            className="h-8 px-3 bg-white border border-[#E2E8F0] rounded-lg text-xs text-[#475569] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/20 focus:border-[#1D4ED8]"
-          >
-            {leadStatusOptions.map((status) => (
-              <option key={status} value={status}>
-                {status === 'All' ? 'All Lead Statuses' : status}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={filterAction}
-            onChange={(event) => {
-              setPage(1)
-              setFilterAction(event.target.value)
-            }}
-            className="h-8 px-3 bg-white border border-[#E2E8F0] rounded-lg text-xs text-[#475569] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/20 focus:border-[#1D4ED8]"
-          >
-            {actionOptions.map((action) => (
-              <option key={action} value={action}>
-                {action === 'All' ? 'All Actions' : humanizeActionLabel(action)}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={filterRole}
-            onChange={(event) => {
-              setPage(1)
-              setFilterRole(event.target.value as RoleFilter)
-            }}
-            className="h-8 px-3 bg-white border border-[#E2E8F0] rounded-lg text-xs text-[#475569] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/20 focus:border-[#1D4ED8]"
-          >
-          {roleOptions.map((role) => (
-              <option key={role.value} value={role.value}>
-                {role.label}
-              </option>
-            ))}
-          </select>
         </div>
       </div>
 
-      <div className="p-4">
-        <div className="bg-white rounded-xl border border-[#E2E8F0] overflow-hidden">
-          <div className="grid grid-cols-[140px_200px_160px_1fr_36px] gap-3 px-4 py-2.5 bg-[#F8FAFC] border-b border-[#E2E8F0]">
-            <div className="text-[9px] font-bold uppercase tracking-wider text-[#94A3B8]">Timestamp</div>
-            <div className="text-[9px] font-bold uppercase tracking-wider text-[#94A3B8]">Actor</div>
-            <div className="text-[9px] font-bold uppercase tracking-wider text-[#94A3B8]">Event</div>
-            <div className="text-[9px] font-bold uppercase tracking-wider text-[#94A3B8]">Change Summary</div>
-            <div />
-          </div>
-
-          {rows.length === 0 ? (
-            <div className="px-6 py-16 text-center text-[#94A3B8] text-sm">{urgentEmptyMessage}</div>
+      {/* ── Timeline ── */}
+      <div className="p-6 max-w-6xl mx-auto">
+        <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden">
+          {loading && !hasRows ? (
+            <div className="py-20 text-center text-[#94A3B8] text-sm">Loading audit history…</div>
+          ) : !hasRows ? (
+            <div className="py-20 text-center">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[#F1F5F9] mb-3">
+                <Clock size={20} className="text-[#94A3B8]" />
+              </div>
+              <p className="text-sm font-semibold text-[#475569]">No audit entries match your filters</p>
+              <p className="text-xs text-[#94A3B8] mt-1">Try broadening the search or clearing filters.</p>
+            </div>
           ) : (
-            <div>
+            <div className="divide-y divide-[#F1F5F9]">
               {rows.map((log) => {
                 const expanded = expandedId === log._id
-                const dateParts = formatDateParts(log.createdAt)
-                const hasSnapshots = Boolean(log.before || log.after)
-                const changeRows = buildChangeRows(log.before, log.after)
-                const beforeEntries = snapshotEntries(log.before)
-                const afterEntries = snapshotEntries(log.after)
+                const time = formatTimestamp(log.createdAt)
+                const actionStyle = getActionStyle(log.action)
+                const summary = buildSummary(log.action, log.before, log.after, log.entity || 'record')
+                const changes = extractChanges(log.before, log.after)
 
                 return (
-                  <div key={log._id} className="border-b border-[#F1F5F9] last:border-b-0">
-                    <div className="grid grid-cols-[140px_200px_160px_1fr_36px] gap-3 px-4 py-2.5 hover:bg-[#FAFCFF] transition-colors">
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-[#0F172A]">{dateParts.date}</p>
-                        <p className="text-[10px] text-[#94A3B8] mt-0.5">{dateParts.time}</p>
+                  <div key={log._id}>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedId(expanded ? null : log._id)}
+                      className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-[#FAFCFF] transition-colors text-left"
+                    >
+                      {/* Timeline dot */}
+                      <div className="relative flex flex-col items-center shrink-0 w-14">
+                        <div
+                          className="w-2.5 h-2.5 rounded-full mb-1"
+                          style={{ background: actionStyle.dot }}
+                        />
+                        <p className="text-xs font-bold text-[#0F172A] leading-none">{time.primary}</p>
+                        <p className="text-[10px] text-[#94A3B8] mt-0.5 leading-none">{time.secondary}</p>
                       </div>
 
-                      <div className="min-w-0">
-                        <div className="flex items-start gap-2">
-                          <div className="w-7 h-7 rounded-lg bg-[#EFF6FF] text-[#1D4ED8] text-[10px] font-bold flex items-center justify-center shrink-0">
-                            {String(log.actorName || '?')
-                              .split(' ')
-                              .filter(Boolean)
-                              .map((part) => part[0])
-                              .join('')
-                              .slice(0, 2)
-                              .toUpperCase()}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-[#0F172A] break-words">{log.actorName}</p>
-                            <span className={`mt-0.5 inline-flex px-1.5 py-0.5 rounded-full border text-[9px] font-bold ${getRoleBadgeClasses(log.actorRole)}`}>
-                              {formatRoleLabel(log.actorRole)}
-                            </span>
-                          </div>
+                      {/* Actor avatar */}
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE] text-[#1D4ED8] text-[11px] font-bold flex items-center justify-center shrink-0 ring-1 ring-[#BFDBFE]">
+                        {getInitials(log.actorName)}
+                      </div>
+
+                      {/* Main content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <p className="text-sm font-bold text-[#0F172A] truncate">{log.actorName}</p>
+                          <span className="text-[10px] text-[#94A3B8]">•</span>
+                          <span
+                            className="inline-flex px-2 py-0.5 rounded-full border text-[10px] font-bold"
+                            style={{
+                              background: actionStyle.bg,
+                              color: actionStyle.text,
+                              borderColor: actionStyle.border,
+                            }}
+                          >
+                            {humanizeAction(log.action)}
+                          </span>
                         </div>
+                        <p className="text-xs text-[#64748B] truncate">{summary}</p>
                       </div>
 
-                      <div className="min-w-0">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full border text-[10px] font-bold ${getActionBadgeClasses(log.action)}`}>
-                          {humanizeActionLabel(log.action)}
-                        </span>
-                        <p className="text-[10px] text-[#64748B] mt-1 break-words">
-                          {log.entity}
-                          {log.entityId ? <span className="text-[#94A3B8]"> • {log.entityId.slice(-8)}</span> : null}
-                        </p>
+                      {/* Expand chevron */}
+                      <div className="shrink-0 text-[#94A3B8]">
+                        {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                       </div>
+                    </button>
 
-                      <div className="min-w-0">
-                        {hasSnapshots ? (
-                          changeRows.length > 0 ? (
-                            <div className="space-y-1">
-                              {changeRows.slice(0, 3).map((row) => (
-                                <div key={row.key} className="flex items-start gap-2 text-[10px]">
-                                  <span className="font-semibold text-[#475569] shrink-0 min-w-[80px]">{row.label}:</span>
-                                  <span className="text-[#94A3B8] line-through truncate max-w-[80px]">{row.before === 'Empty' ? '—' : row.before}</span>
-                                  <span className="text-[#0F172A] font-medium truncate max-w-[100px]">{row.after}</span>
-                                </div>
-                              ))}
-                              {changeRows.length > 3 ? (
-                                <p className="text-[9px] text-[#94A3B8]">+{changeRows.length - 3} more changes</p>
-                              ) : null}
-                            </div>
-                          ) : (
-                            <p className="text-[10px] text-[#94A3B8] italic">No field differences detected</p>
-                          )
-                        ) : (
-                          <p className="text-[10px] text-[#94A3B8] italic">No snapshot</p>
-                        )}
-                      </div>
-
-                      <div className="flex items-start justify-end">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedId((current) => (current === log._id ? null : log._id))}
-                          className="p-1 rounded-lg text-[#64748B] hover:bg-[#F1F5F9] transition-colors"
-                          title={expanded ? 'Hide details' : 'Show details'}
-                        >
-                          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        </button>
-                      </div>
-                    </div>
-
-                    {expanded ? (
-                      <div className="px-4 pb-3">
-                        <div className="rounded-xl border border-[#E2E8F0] bg-[#FAFBFC] p-3">
-                          {changeRows.length > 0 ? (
-                            <div className="mb-3">
-                              <p className="text-[9px] font-bold uppercase tracking-wide text-[#94A3B8] mb-1.5">Field Changes</p>
-                              <div className="rounded-lg border border-[#E2E8F0] overflow-hidden bg-white">
-                                <div className="grid grid-cols-[160px_1fr_1fr] gap-3 px-3 py-2 bg-[#F8FAFC] border-b border-[#E2E8F0]">
-                                  <p className="text-[9px] font-bold uppercase tracking-wide text-[#94A3B8]">Field</p>
-                                  <p className="text-[9px] font-bold uppercase tracking-wide text-[#94A3B8]">Before</p>
-                                  <p className="text-[9px] font-bold uppercase tracking-wide text-[#94A3B8]">After</p>
-                                </div>
-                                {changeRows.map((row) => (
-                                  <div key={row.key} className="grid grid-cols-[160px_1fr_1fr] gap-3 px-3 py-2 border-b border-[#F1F5F9] last:border-b-0">
-                                    <p className="text-[10px] font-semibold text-[#334155]">{row.label}</p>
-                                    <p className="text-[10px] text-[#64748B] break-words">{row.before}</p>
-                                    <p className="text-[10px] font-medium text-[#0F172A] break-words">{row.after}</p>
+                    {/* Expanded details */}
+                    {expanded && (
+                      <div className="px-5 pb-4 pt-0">
+                        <div className="ml-[72px] rounded-xl bg-[#FAFBFC] border border-[#E2E8F0] p-4">
+                          {changes.length > 0 ? (
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#94A3B8] mb-2">
+                                Changes ({changes.length})
+                              </p>
+                              <div className="space-y-2">
+                                {changes.map((c) => (
+                                  <div
+                                    key={c.key}
+                                    className="flex items-start gap-3 text-xs py-1.5 border-b border-[#F1F5F9] last:border-b-0 last:pb-0"
+                                  >
+                                    <span className="font-semibold text-[#475569] shrink-0 min-w-[120px]">
+                                      {c.label}
+                                    </span>
+                                    <span className="text-[#94A3B8] line-through truncate flex-1 min-w-0">
+                                      {c.before || '—'}
+                                    </span>
+                                    <span className="text-[#0F172A] font-semibold truncate flex-1 min-w-0">
+                                      {c.after || '—'}
+                                    </span>
                                   </div>
                                 ))}
                               </div>
                             </div>
-                          ) : null}
+                          ) : (
+                            <p className="text-xs text-[#94A3B8] italic">
+                              No field-level changes recorded for this event.
+                            </p>
+                          )}
 
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="min-w-0">
-                              <p className="text-[9px] font-bold uppercase tracking-wide text-[#94A3B8] mb-1.5">Before Snapshot</p>
-                              <div className="rounded-lg border border-[#E2E8F0] bg-white p-2.5 space-y-1.5">
-                                {beforeEntries.length > 0 ? (
-                                  beforeEntries.map((entry) => (
-                                    <div key={entry.key} className="flex items-start justify-between gap-2 border-b border-[#F8FAFC] pb-1.5 last:border-b-0 last:pb-0">
-                                      <p className="text-[10px] font-semibold text-[#64748B] shrink-0">{entry.label}</p>
-                                      <p className="text-[10px] text-[#0F172A] text-right break-words">{entry.value}</p>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <pre className="text-[10px] leading-relaxed text-[#64748B] font-mono overflow-x-auto whitespace-pre-wrap break-words">
-                                    {log.before ? prettyJson(log.before) : 'No snapshot'}
-                                  </pre>
-                                )}
-                              </div>
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-[9px] font-bold uppercase tracking-wide text-[#94A3B8] mb-1.5">After Snapshot</p>
-                              <div className="rounded-lg border border-[#DBEAFE] bg-white p-2.5 space-y-1.5">
-                                {afterEntries.length > 0 ? (
-                                  afterEntries.map((entry) => (
-                                    <div key={entry.key} className="flex items-start justify-between gap-2 border-b border-[#F8FAFC] pb-1.5 last:border-b-0 last:pb-0">
-                                      <p className="text-[10px] font-semibold text-[#64748B] shrink-0">{entry.label}</p>
-                                      <p className="text-[10px] text-[#0F172A] text-right break-words">{entry.value}</p>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <pre className="text-[10px] leading-relaxed text-[#0F172A] font-mono overflow-x-auto whitespace-pre-wrap break-words">
-                                    {log.after ? prettyJson(log.after) : 'No snapshot'}
-                                  </pre>
-                                )}
-                              </div>
-                            </div>
-                          </div>
+                          {log.entityId && (
+                            <p className="mt-3 pt-3 border-t border-[#E2E8F0] text-[10px] text-[#94A3B8] font-mono">
+                              {log.entity} · {log.entityId}
+                            </p>
+                          )}
                         </div>
                       </div>
-                    ) : null}
+                    )}
                   </div>
                 )
               })}
@@ -483,27 +427,30 @@ export default function AuditLogConnected() {
           )}
         </div>
 
-        <div className="flex items-center justify-center gap-3 mt-3">
-          <button
-            onClick={() => setPage((current) => Math.max(1, current - 1))}
-            disabled={page <= 1 || loading}
-            className="px-3 py-1.5 bg-white border border-[#E2E8F0] rounded-lg text-xs font-bold text-[#475569] disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Previous
-          </button>
-          <div className="text-xs font-bold text-[#1D4ED8]">
-            Page {page}
-            {pagination ? ` of ${pagination.pages}` : ''}
-            {pagination ? <span className="text-[#94A3B8] font-normal"> · {pagination.total} total</span> : null}
+        {/* ── Pagination ── */}
+        {hasRows && pagination && pagination.pages > 1 && (
+          <div className="flex items-center justify-center gap-2 mt-5">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1 || loading}
+              className="px-3 h-8 bg-white border border-[#E2E8F0] rounded-lg text-xs font-bold text-[#475569] hover:bg-[#F8FAFC] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Previous
+            </button>
+            <div className="flex items-center gap-0 bg-[#0F172A] rounded-lg p-0.5">
+              <div className="px-3 h-7 flex items-center justify-center bg-white rounded-md text-[11px] font-bold text-[#0F172A] whitespace-nowrap">
+                {page} <span className="mx-1 text-[#94A3B8]">/</span> {pagination.pages}
+              </div>
+            </div>
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={loading || page >= pagination.pages}
+              className="px-3 h-8 bg-white border border-[#E2E8F0] rounded-lg text-xs font-bold text-[#475569] hover:bg-[#F8FAFC] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+            </button>
           </div>
-          <button
-            onClick={() => setPage((current) => current + 1)}
-            disabled={loading || (pagination ? page >= pagination.pages : true)}
-            className="px-3 py-1.5 bg-white border border-[#E2E8F0] rounded-lg text-xs font-bold text-[#475569] disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next
-          </button>
-        </div>
+        )}
       </div>
     </div>
   )
