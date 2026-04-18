@@ -7,7 +7,7 @@ import { useFeatureControls } from '../../context/FeatureControlsContext'
 import type { Call } from '../../api/calls'
 import { followUpsAPI, type FollowUpRecord } from '../../api/followUps'
 import { leadsAPI } from '../../api/leads'
-import { PhoneIncoming, ArrowUpRight, CalendarClock, CheckCircle2, Clock3, UserCheck, X, Phone, MapPin } from 'lucide-react'
+import { PhoneIncoming, ArrowUpRight, CalendarClock, CheckCircle2, Clock3, UserCheck, Phone, MapPin } from 'lucide-react'
 
 type PendingAssignment = {
   leadId: string
@@ -162,28 +162,20 @@ export default function Layout() {
     }
   }, [followUpPopup, user?.role, featureControls.followUpReminders])
 
-  const handleAcceptAssignment = async () => {
+  const handleAcknowledgeAssignment = async (openLead = false) => {
     if (!currentAssignment || assignmentResponding) return
+    const leadId = currentAssignment.leadId
     try {
       setAssignmentResponding(true)
-      await leadsAPI.respondToAssignment(currentAssignment.leadId, 'accept')
+      // Optimistically remove from queue so the popup closes immediately
       popAssignment()
-      navigate(`/leads/${currentAssignment.leadId}`)
-    } catch (error) {
-      console.error('Failed to accept assignment:', error)
-    } finally {
-      setAssignmentResponding(false)
-    }
-  }
-
-  const handleDeclineAssignment = async () => {
-    if (!currentAssignment || assignmentResponding) return
-    try {
-      setAssignmentResponding(true)
-      await leadsAPI.respondToAssignment(currentAssignment.leadId, 'decline')
-      popAssignment()
-    } catch (error) {
-      console.error('Failed to decline assignment:', error)
+      // Fire-and-forget — acknowledge on backend so the popup doesn't come back on reload
+      leadsAPI.respondToAssignment(leadId, 'accept').catch((err) => {
+        console.error('Failed to acknowledge assignment:', err)
+      })
+      if (openLead) {
+        navigate(`/leads/${leadId}`)
+      }
     } finally {
       setAssignmentResponding(false)
     }
@@ -253,9 +245,14 @@ export default function Layout() {
       )}
 
       {currentAssignment && (
-        /* Sticky overlay — clicking outside does nothing (no onClick on backdrop) */
-        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-[8px] flex items-center justify-center p-4">
-          <div className="w-full max-w-[420px] rounded-3xl border border-[#BFDBFE] bg-white shadow-[0_32px_96px_rgba(15,23,42,0.4)] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div
+          className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-[6px] flex items-center justify-center p-4"
+          onClick={() => handleAcknowledgeAssignment(false)}
+        >
+          <div
+            className="w-full max-w-[420px] rounded-3xl border border-[#BFDBFE] bg-white shadow-[0_32px_96px_rgba(15,23,42,0.4)] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
 
             {/* Header */}
             <div className="px-5 pt-5 pb-4 bg-gradient-to-br from-[#EFF6FF] via-[#F0F7FF] to-white border-b border-[#DBEAFE]">
@@ -265,13 +262,13 @@ export default function Layout() {
                     <UserCheck size={18} className="text-white" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-[#0F172A]">Lead Assigned to You</p>
-                    <p className="text-[11px] text-[#64748B] mt-0.5">You must accept or decline to continue</p>
+                    <p className="text-sm font-bold text-[#0F172A]">New Lead Assigned</p>
+                    <p className="text-[11px] text-[#64748B] mt-0.5">This lead has been added to your pipeline</p>
                   </div>
                 </div>
                 {assignmentQueue.length > 1 && (
                   <span className="shrink-0 px-2 py-0.5 rounded-full bg-[#EFF6FF] border border-[#BFDBFE] text-[#1D4ED8] text-[10px] font-bold">
-                    {assignmentQueue.length} pending
+                    +{assignmentQueue.length - 1} more
                   </span>
                 )}
               </div>
@@ -311,36 +308,23 @@ export default function Layout() {
                 </div>
               )}
 
-              {/* Notice */}
-              <div className="mt-3 rounded-xl bg-[#FFFBEB] border border-[#FDE68A] px-3 py-2">
-                <p className="text-[11px] text-[#92400E] font-medium">
-                  This popup will stay until you respond. If you decline, the lead will be unassigned.
-                </p>
-              </div>
-
               {/* Actions */}
-              <div className="flex items-center gap-3 mt-4">
+              <div className="flex items-center gap-2.5 mt-4">
                 <button
-                  onClick={handleAcceptAssignment}
+                  onClick={() => handleAcknowledgeAssignment(true)}
                   disabled={assignmentResponding}
                   className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1D4ED8] text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {assignmentResponding ? (
-                    <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <CheckCircle2 size={15} />
-                      Accept
-                    </>
-                  )}
+                  <ArrowUpRight size={14} />
+                  View Lead
                 </button>
                 <button
-                  onClick={handleDeclineAssignment}
+                  onClick={() => handleAcknowledgeAssignment(false)}
                   disabled={assignmentResponding}
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-[#FECACA] bg-[#FEF2F2] text-[#DC2626] text-sm font-bold rounded-xl hover:bg-[#FEE2E2] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-[#E2E8F0] bg-white text-sm font-semibold text-[#475569] rounded-xl hover:bg-[#F8FAFC] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <X size={15} />
-                  Decline
+                  <CheckCircle2 size={14} />
+                  Got it
                 </button>
               </div>
             </div>

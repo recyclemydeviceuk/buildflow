@@ -387,15 +387,15 @@ function FilterDropdown({
       <button
         type="button"
         onClick={() => setOpen(p => !p)}
-        className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border text-xs font-medium shadow-sm transition-all whitespace-nowrap ${
+        className={`inline-flex items-center gap-1.5 h-9 px-3.5 rounded-lg border text-xs font-semibold shadow-sm transition-all whitespace-nowrap ${
           active
-            ? 'bg-[#EFF6FF] border-[#1D4ED8] text-[#1D4ED8]'
+            ? 'bg-[#EFF6FF] border-[#1D4ED8] text-[#1D4ED8] ring-1 ring-[#1D4ED8]/10'
             : 'bg-white border-[#E2E8F0] text-[#475569] hover:bg-[#F8FAFC] hover:border-[#CBD5E1]'
         }`}
       >
-        <Icon size={12} className={active ? 'text-[#1D4ED8]' : 'text-[#94A3B8]'} />
+        <Icon size={13} className={active ? 'text-[#1D4ED8]' : 'text-[#94A3B8]'} />
         <span>{selected?.label ?? value}</span>
-        {open ? <ChevronUp size={11} className="ml-0.5" /> : <ChevronDown size={11} className="ml-0.5" />}
+        {open ? <ChevronUp size={12} className="ml-0.5 opacity-70" /> : <ChevronDown size={12} className="ml-0.5 opacity-70" />}
       </button>
 
       {open && (
@@ -506,23 +506,23 @@ function CalendarPicker({
       <button
         type="button"
         onClick={() => setOpen(p => !p)}
-        className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border text-xs font-medium shadow-sm transition-all whitespace-nowrap ${
+        className={`inline-flex items-center gap-1.5 h-9 px-3.5 rounded-lg border text-xs font-semibold shadow-sm transition-all whitespace-nowrap ${
           active
-            ? 'bg-[#EFF6FF] border-[#1D4ED8] text-[#1D4ED8]'
+            ? 'bg-[#EFF6FF] border-[#1D4ED8] text-[#1D4ED8] ring-1 ring-[#1D4ED8]/10'
             : 'bg-white border-[#E2E8F0] text-[#475569] hover:bg-[#F8FAFC] hover:border-[#CBD5E1]'
         }`}
       >
-        <CalendarDays size={12} className={active ? 'text-[#1D4ED8]' : 'text-[#94A3B8]'} />
+        <CalendarDays size={13} className={active ? 'text-[#1D4ED8]' : 'text-[#94A3B8]'} />
         <span>{displayLabel}</span>
         {active && (
           <span
             onClick={e => { e.stopPropagation(); onChange('') }}
-            className="ml-0.5 w-3.5 h-3.5 rounded-full bg-[#1D4ED8]/15 flex items-center justify-center hover:bg-[#1D4ED8]/30 cursor-pointer"
+            className="ml-0.5 w-4 h-4 rounded-full bg-[#1D4ED8]/15 flex items-center justify-center hover:bg-[#1D4ED8]/30 cursor-pointer transition-colors"
           >
-            <X size={8} className="text-[#1D4ED8]" />
+            <X size={9} className="text-[#1D4ED8]" strokeWidth={2.5} />
           </span>
         )}
-        {!active && (open ? <ChevronUp size={11} className="ml-0.5" /> : <ChevronDown size={11} className="ml-0.5" />)}
+        {!active && (open ? <ChevronUp size={12} className="ml-0.5 opacity-70" /> : <ChevronDown size={12} className="ml-0.5 opacity-70" />)}
       </button>
 
       {open && (
@@ -751,63 +751,68 @@ export default function CallLog() {
     <div className="h-screen bg-[#F8FAFC] flex flex-col">
 
       {/* ── Header ── */}
-      <div className="bg-white border-b border-[#E2E8F0] px-5 py-3">
-        <div className="flex items-center justify-between mb-3">
+      <div className="bg-white border-b border-[#E2E8F0] px-6 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+        <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-base font-bold text-[#0F172A]">Call Log</h1>
-            <p className="text-xs text-[#475569] mt-0.5">{pagination.total} calls from Exotel</p>
+            <h1 className="text-lg font-bold text-[#0F172A] tracking-tight">Call Log</h1>
+            <p className="text-xs text-[#64748B] mt-0.5">
+              <span className="font-semibold text-[#0F172A]">{pagination.total.toLocaleString('en-IN')}</span>
+              <span className="text-[#94A3B8]"> calls from Exotel</span>
+            </p>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={handleRefresh}
               disabled={loading || refreshing}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-[#E2E8F0] bg-white text-xs font-semibold text-[#475569] hover:bg-[#F8FAFC] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-lg border border-[#E2E8F0] bg-white text-xs font-semibold text-[#475569] hover:bg-[#F8FAFC] hover:border-[#CBD5E1] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
-              <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
+              <RefreshCw size={13} className={refreshing ? 'animate-spin text-[#1D4ED8]' : 'text-[#64748B]'} />
               Refresh
             </button>
 
             {/* Pagination */}
-            <div className="flex items-center gap-0.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg px-0.5 py-0.5 shadow-sm">
+            <div className="flex items-center gap-0.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg p-1 shadow-sm">
               <button
                 disabled={pagination.page <= 1 || loading}
                 onClick={() => fetchCalls(pagination.page - 1)}
-                className="w-6 h-6 flex items-center justify-center rounded text-[#64748B] hover:bg-white hover:shadow-sm disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                className="w-7 h-7 flex items-center justify-center rounded-md text-[#64748B] hover:bg-white hover:shadow-sm hover:text-[#0F172A] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
               >
-                <ChevronLeft size={13} />
+                <ChevronLeft size={14} />
               </button>
-              <div className="px-2 text-[11px] font-semibold text-[#475569] whitespace-nowrap">
-                <span className="text-[#0F172A] font-bold">{pagination.page}</span> / <span className="text-[#0F172A] font-bold">{Math.max(1, pagination.pages)}</span>
+              <div className="px-2.5 text-[11px] font-semibold text-[#475569] whitespace-nowrap tabular-nums">
+                <span className="text-[#0F172A] font-bold">{pagination.page}</span>
+                <span className="text-[#CBD5E1] mx-1">/</span>
+                <span className="text-[#0F172A] font-bold">{Math.max(1, pagination.pages)}</span>
               </div>
               <button
                 disabled={pagination.page >= pagination.pages || loading}
                 onClick={() => fetchCalls(pagination.page + 1)}
-                className="w-6 h-6 flex items-center justify-center rounded text-[#64748B] hover:bg-white hover:shadow-sm disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                className="w-7 h-7 flex items-center justify-center rounded-md text-[#64748B] hover:bg-white hover:shadow-sm hover:text-[#0F172A] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
               >
-                <ChevronRight size={13} />
+                <ChevronRight size={14} />
               </button>
             </div>
           </div>
         </div>
 
         {syncMsg && (
-          <div className="mb-3 px-3 py-2 rounded-lg bg-[#F0FDF4] border border-[#BBF7D0] text-sm text-[#15803D] font-medium">
+          <div className="mb-3 px-3.5 py-2 rounded-lg bg-[#F0FDF4] border border-[#BBF7D0] text-sm text-[#15803D] font-medium">
             {syncMsg}
           </div>
         )}
 
         {/* Filters */}
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
 
           {/* Search */}
           <div className="relative flex-1 min-w-44">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none" />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search name or phone..."
-              className="w-full pl-8 pr-3 h-8 bg-white border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] placeholder-[#94A3B8] shadow-sm focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/30 focus:border-[#1D4ED8] transition-all"
+              className="w-full pl-9 pr-3 h-9 bg-white border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] placeholder-[#94A3B8] shadow-sm focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/20 focus:border-[#1D4ED8] hover:border-[#CBD5E1] transition-all"
             />
           </div>
 
@@ -869,22 +874,22 @@ export default function CallLog() {
           {hasFilters ? (
             <button
               onClick={clearFilters}
-              className="inline-flex items-center gap-1 h-8 px-2.5 text-xs font-semibold text-[#DC2626] bg-[#FEF2F2] border border-[#FECACA] rounded-lg hover:bg-[#FEE2E2] transition-colors shadow-sm"
+              className="inline-flex items-center gap-1 h-9 px-3 text-xs font-semibold text-[#DC2626] bg-[#FEF2F2] border border-[#FECACA] rounded-lg hover:bg-[#FEE2E2] hover:border-[#FCA5A5] transition-all shadow-sm"
             >
-              <X size={11} /> Clear
+              <X size={12} strokeWidth={2.5} /> Clear
             </button>
           ) : null}
         </div>
       </div>
 
       {/* ── Table ── */}
-      <div className="flex-1 overflow-auto px-4 pb-4">
-        <div className="bg-white rounded-xl border border-[#E2E8F0] overflow-hidden">
+      <div className="flex-1 overflow-auto px-5 py-4">
+        <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
           <table className="w-full">
             <thead className="sticky top-0 z-10">
-              <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
+              <tr className="bg-gradient-to-b from-[#F8FAFC] to-[#F1F5F9] border-b border-[#E2E8F0]">
                 {['Lead / Contact', 'Direction', 'Exophone / Rep', 'Outcome', 'Duration', 'Date & Time', 'Rec.'].map(h => (
-                  <th key={h} className="px-3 py-2.5 text-left text-[9px] font-bold text-[#94A3B8] uppercase tracking-wider whitespace-nowrap">
+                  <th key={h} className="px-4 py-3 text-left text-[10px] font-bold text-[#64748B] uppercase tracking-[0.08em] whitespace-nowrap">
                     {h}
                   </th>
                 ))}
@@ -893,16 +898,19 @@ export default function CallLog() {
             <tbody className="bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-20 text-center">
-                    <Loader2 size={28} className="text-[#1D4ED8] animate-spin mx-auto" />
+                  <td colSpan={7} className="px-6 py-24 text-center">
+                    <Loader2 size={30} className="text-[#1D4ED8] animate-spin mx-auto" />
+                    <p className="text-[#94A3B8] text-xs font-medium mt-3">Loading calls…</p>
                   </td>
                 </tr>
               ) : calls.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-20 text-center">
-                    <Phone size={32} className="text-[#CBD5E1] mx-auto mb-3" />
-                    <p className="text-[#94A3B8] text-sm font-medium">No calls found</p>
-                    <p className="text-[#CBD5E1] text-xs mt-1">
+                  <td colSpan={7} className="px-6 py-24 text-center">
+                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] mb-3">
+                      <Phone size={22} className="text-[#CBD5E1]" />
+                    </div>
+                    <p className="text-[#475569] text-sm font-semibold">No calls found</p>
+                    <p className="text-[#94A3B8] text-xs mt-1">
                       {hasFilters ? 'Try clearing filters' : 'Calls synced from Exotel will appear here'}
                     </p>
                   </td>
