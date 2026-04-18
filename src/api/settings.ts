@@ -42,12 +42,20 @@ export interface FeatureControls {
   representativeCanDelete: boolean
 }
 
+export interface CityAssignmentRule {
+  _id?: string
+  cities: string[]
+  userId: string
+  userName: string
+}
+
 export interface SettingsData {
   leadRouting?: {
     mode: 'manual' | 'auto'
     offerTimeout: number
     skipLimit: number
     autoEscalate: boolean
+    cityAssignmentRules: CityAssignmentRule[]
   }
   leadFields: {
     plotSizeUnits: string[]
@@ -72,6 +80,7 @@ export interface AppConfigData {
     offerTimeout: number
     skipLimit: number
     autoEscalate: boolean
+    cityAssignmentRules?: CityAssignmentRule[]
   }
   featureControls: FeatureControls
 }
@@ -133,8 +142,17 @@ export const settingsAPI = {
     return response.data
   },
 
-  updateLeadRouting: async (data: { offerTimeout: string | number; skipLimit: string | number }) => {
+  updateLeadRouting: async (data: {
+    mode?: 'manual' | 'auto'
+    offerTimeout?: string | number
+    skipLimit?: string | number
+  }) => {
     const response = await client.patch('/settings/lead-routing', data)
+    return response.data
+  },
+
+  updateCityAssignmentRules: async (rules: Array<{ cities: string[]; userId: string }>) => {
+    const response = await client.patch('/settings/city-assignment-rules', { rules })
     return response.data
   },
 

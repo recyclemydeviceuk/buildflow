@@ -22,7 +22,7 @@ import {
   Users,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { settingsAPI, type FeatureControls, type LeadFieldConfig, type LeadFieldKey, type SmsTemplate } from '../api/settings'
+import { settingsAPI, type FeatureControls, type LeadFieldConfig, type LeadFieldKey, type SmsTemplate, type CityAssignmentRule } from '../api/settings'
 import { teamAPI, type TeamMember } from '../api/team'
 import { uploadsAPI } from '../api/uploads'
 import { authAPI, DEFAULT_NOTIFICATION_PREFS, type NotificationPrefs } from '../api/auth'
@@ -795,6 +795,14 @@ export default function Settings({ role }: { role?: string }) {
     skipLimit: '0',
     autoEscalate: false,
   })
+  // Editable draft of city → representative rules. Persisted via
+  // settingsAPI.updateCityAssignmentRules when the user hits Save.
+  const [cityRules, setCityRules] = useState<CityAssignmentRule[]>([])
+  const [routingSaving, setRoutingSaving] = useState(false)
+  const [routingError, setRoutingError] = useState('')
+  // Snapshot of configured cities from the Settings doc. The Cities tab owns
+  // its own local state; this is a read-only copy just for the routing picker.
+  const [availableCities, setAvailableCities] = useState<string[]>([])
   const [featureControls, setFeatureControls] = useState<FeatureControls>(DEFAULT_FEATURE_CONTROLS)
   const [featureSaving, setFeatureSaving] = useState(false)
   const [featureError, setFeatureError] = useState('')
@@ -870,7 +878,10 @@ export default function Settings({ role }: { role?: string }) {
             skipLimit: String(response.data.leadRouting.skipLimit ?? 0),
             autoEscalate: Boolean(response.data.leadRouting.autoEscalate),
           })
+          setCityRules(response.data.leadRouting.cityAssignmentRules || [])
         }
+
+        setAvailableCities(Array.isArray(response.data.cities) ? response.data.cities : [])
 
         setFeatureControls(normalizeFeatureControls(response.data.featureControls))
       })
@@ -1879,63 +1890,293 @@ export default function Settings({ role }: { role?: string }) {
     </SectionShell>
   )
 
-const renderRoutingSection = () => (
+const reps = teamMembers.filter((member) => member.role === 'representative' && member.isActive !== false)
+
+  const saveRoutingMode = async (nextMode: 'manual' | 'auto') => {
+    try {
+      setRoutingSaving(true)
+      setRoutingError('')
+      const res = await settingsAPI.updateLeadRouting({
+        mode: nextMode,
+        offerTimeout: routing.offerTimeout,
+        skipLimit: routing.skipLimit,
+      })
+      if (res.success) {
+        setRouting((current) => ({ ...current, mode: nextMode }))
+        // Keep featureControls in sync locally — the backend already flipped
+        // manualAssignment on our behalf.
+        if (res.data?.featureControls) {
+          const synced = normalizeFeatureControls(res.data.featureControls)
+          setFeatureControls(synced)
+          broadcastFeatureControlsUpdated(synced)
+        }
+        handleSave()
+      }
+    } catch (error: any) {
+      console.error('Failed to update routing mode:', error)
+      setRoutingError(error?.response?.data?.message || 'Could not update the routing mode.')
+    } finally {
+      setRoutingSaving(false)
+    }
+  }
+
+  const saveCityRules = async () => {
+    try {
+      setRoutingSaving(true)
+      setRoutingError('')
+      // Strip down to the payload shape the backend expects. The server will
+      // hydrate userName itself from the matching User document.
+      const payload = cityRules
+        .filter((rule) => rule.userId && rule.cities.length > 0)
+        .map((rule) => ({ userId: rule.userId, cities: rule.cities }))
+      const res = await settingsAPI.updateCityAssignmentRules(payload)
+      if (res.success) {
+        setCityRules(res.data?.leadRouting?.cityAssignmentRules || [])
+        handleSave()
+      }
+    } catch (error: any) {
+      console.error('Failed to save city rules:', error)
+      setRoutingError(error?.response?.data?.message || 'Could not save the city rules.')
+    } finally {
+      setRoutingSaving(false)
+    }
+  }
+
+  const addCityRule = () => {
+    setCityRules((current) => [...current, { cities: [], userId: '', userName: '' }])
+  }
+
+  const removeCityRule = (index: number) => {
+    setCityRules((current) => current.filter((_, i) => i !== index))
+  }
+
+  const toggleCityOnRule = (index: number, city: string) => {
+    setCityRules((current) =>
+      current.map((rule, i) => {
+        if (i !== index) return rule
+        const has = rule.cities.includes(city)
+        return {
+          ...rule,
+          cities: has ? rule.cities.filter((c) => c !== city) : [...rule.cities, city],
+        }
+      })
+    )
+  }
+
+  const setRuleRep = (index: number, userId: string) => {
+    const rep = reps.find((r) => r.id === userId)
+    setCityRules((current) =>
+      current.map((rule, i) => (i === index ? { ...rule, userId, userName: rep?.name || '' } : rule))
+    )
+  }
+
+  const isAutoMode = routing.mode === 'auto'
+
+  const renderRoutingSection = () => (
     <SectionShell
       title="Lead Assignment"
-      description={
-        featureControls.manualAssignment
-          ? 'BuildFlow is currently using manual lead assignment with representative transfers enabled.'
-          : 'Manual assignment is turned off, so this panel is showing the stored routing fallback.'
-      }
+      description="Choose how new leads are owned. City rules take priority, then fall back to round-robin."
     >
+      {/* ── Mode toggle ── */}
       <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 space-y-5">
-        <div className="grid grid-cols-3 gap-4">
-          <div className="rounded-2xl border border-[#DBEAFE] bg-[#EFF6FF] px-4 py-4">
-            <p className="text-xs font-bold uppercase tracking-wide text-[#1D4ED8]">Mode</p>
-            <p className="text-sm font-bold text-[#0F172A] mt-2">
-              {featureControls.manualAssignment ? 'Manual Assignment' : 'Stored Auto Mode'}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-4">
-            <p className="text-xs font-bold uppercase tracking-wide text-[#94A3B8]">Auto Assign</p>
-            <p className="text-sm font-bold text-[#0F172A] mt-2">{featureControls.manualAssignment ? 'Disabled' : 'Saved as Enabled'}</p>
-          </div>
-          <div className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-4">
-            <p className="text-xs font-bold uppercase tracking-wide text-[#94A3B8]">Auto Escalate</p>
-            <p className="text-sm font-bold text-[#0F172A] mt-2">Disabled</p>
-          </div>
+        <div>
+          <p className="text-sm font-bold text-[#0F172A]">Assignment Mode</p>
+          <p className="text-xs text-[#64748B] mt-0.5">Pick the default behavior for newly-arrived leads.</p>
         </div>
 
-        <div className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] px-5 py-4 space-y-2">
-          <p className="text-sm font-semibold text-[#0F172A]">How the flow works now</p>
-          <ul className="space-y-1 text-sm text-[#475569]">
-            {featureControls.manualAssignment ? (
-              <>
-                <li>All new leads land unassigned on the manager Leads page.</li>
-                <li>Managers assign unowned leads, and representatives can transfer their own leads to another representative.</li>
-                <li>Representatives only see leads assigned to them.</li>
-                <li>Queue-based round robin and live queue flows are disabled.</li>
-              </>
-            ) : (
-              <>
-                <li>Manual assignment has been switched off from Feature Controls.</li>
-                <li>The stored routing mode is preserved as auto for future queue-based logic.</li>
-                <li>Use Feature Controls to turn manual assignment back on whenever needed.</li>
-              </>
-            )}
-          </ul>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => saveRoutingMode('manual')}
+            disabled={routingSaving}
+            className={`text-left p-4 rounded-2xl border-2 transition-all ${
+              !isAutoMode
+                ? 'border-[#1D4ED8] bg-[#EFF6FF] shadow-sm ring-2 ring-[#1D4ED8]/10'
+                : 'border-[#E2E8F0] bg-white hover:border-[#BFDBFE]'
+            } disabled:opacity-60 disabled:cursor-not-allowed`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className={`text-sm font-extrabold ${!isAutoMode ? 'text-[#1D4ED8]' : 'text-[#0F172A]'}`}>
+                Manual
+              </span>
+              {!isAutoMode && (
+                <span className="px-2 py-0.5 rounded-full bg-[#1D4ED8] text-white text-[10px] font-bold uppercase tracking-wide">
+                  Active
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-[#64748B] leading-relaxed">
+              New leads land unassigned. Manager picks the owner manually.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => saveRoutingMode('auto')}
+            disabled={routingSaving}
+            className={`text-left p-4 rounded-2xl border-2 transition-all ${
+              isAutoMode
+                ? 'border-[#16A34A] bg-[#F0FDF4] shadow-sm ring-2 ring-[#16A34A]/10'
+                : 'border-[#E2E8F0] bg-white hover:border-[#BBF7D0]'
+            } disabled:opacity-60 disabled:cursor-not-allowed`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className={`text-sm font-extrabold ${isAutoMode ? 'text-[#16A34A]' : 'text-[#0F172A]'}`}>
+                Round Robin
+              </span>
+              {isAutoMode && (
+                <span className="px-2 py-0.5 rounded-full bg-[#16A34A] text-white text-[10px] font-bold uppercase tracking-wide">
+                  Active
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-[#64748B] leading-relaxed">
+              New leads auto-assign. City rules win first, everyone else goes in rotation.
+            </p>
+          </button>
         </div>
+
+        {routingError && (
+          <p className="text-xs font-semibold text-[#DC2626] bg-[#FEF2F2] border border-[#FECACA] rounded-lg px-3 py-2">
+            {routingError}
+          </p>
+        )}
       </div>
-      <button
-        type="button"
-        onClick={async () => {
-          await settingsAPI.updateLeadRouting({ offerTimeout: routing.offerTimeout, skipLimit: routing.skipLimit })
-          handleSave()
-        }}
-        className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold ${saved ? 'bg-[#16A34A] text-white' : 'bg-[#1D4ED8] text-white'}`}
-      >
-        {saved ? <><Check size={14} /> Saved</> : 'Reapply Manual Flow'}
-      </button>
+
+      {/* ── City Rules (only when Round Robin is active) ── */}
+      {isAutoMode && (
+        <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 space-y-5 mt-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold text-[#0F172A]">City Assignment Rules</p>
+              <p className="text-xs text-[#64748B] mt-0.5">
+                Leads from these cities always go to the chosen rep. Everything else falls back to round-robin.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={addCityRule}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-[#EFF6FF] border border-[#BFDBFE] text-[#1D4ED8] text-xs font-bold hover:bg-[#DBEAFE] transition-colors"
+            >
+              <Plus size={13} /> Add Rule
+            </button>
+          </div>
+
+          {cityRules.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-[#E2E8F0] bg-[#F8FAFC] px-4 py-8 text-center">
+              <p className="text-xs text-[#64748B]">
+                No city rules yet — all leads will round-robin across active reps.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {cityRules.map((rule, index) => (
+                <div
+                  key={rule._id || `new-${index}`}
+                  className="rounded-xl border border-[#E2E8F0] bg-[#FAFCFF] p-4 space-y-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#94A3B8]">
+                      Rule #{index + 1}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => removeCityRule(index)}
+                      className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg bg-[#FEF2F2] border border-[#FECACA] text-[#DC2626] text-[11px] font-bold hover:bg-[#FEE2E2] transition-colors"
+                    >
+                      <Trash2 size={12} /> Remove
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-[#94A3B8] mb-1.5">
+                      Cities
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {availableCities.length === 0 ? (
+                        <p className="text-xs text-[#94A3B8] italic">
+                          No cities configured. Add cities from the Cities tab first.
+                        </p>
+                      ) : (
+                        availableCities.map((city) => {
+                          const selected = rule.cities.includes(city)
+                          return (
+                            <button
+                              key={city}
+                              type="button"
+                              onClick={() => toggleCityOnRule(index, city)}
+                              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${
+                                selected
+                                  ? 'bg-[#1D4ED8] border-[#1D4ED8] text-white shadow-sm'
+                                  : 'bg-white border-[#E2E8F0] text-[#475569] hover:border-[#CBD5E1]'
+                              }`}
+                            >
+                              {city}
+                            </button>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wide text-[#94A3B8] mb-1.5">
+                      Assigns to
+                    </label>
+                    <select
+                      value={rule.userId}
+                      onChange={(e) => setRuleRep(index, e.target.value)}
+                      className="w-full h-9 px-3 bg-white border border-[#E2E8F0] rounded-lg text-xs font-semibold text-[#334155] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/15 focus:border-[#1D4ED8]/50 hover:border-[#CBD5E1] transition-colors"
+                    >
+                      <option value="">Select a representative…</option>
+                      {reps.map((rep) => (
+                        <option key={rep.id} value={rep.id}>
+                          {rep.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 pt-2 border-t border-[#F1F5F9]">
+            <button
+              type="button"
+              onClick={saveCityRules}
+              disabled={routingSaving}
+              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-colors ${
+                saved ? 'bg-[#16A34A] text-white' : 'bg-[#1D4ED8] text-white hover:bg-blue-700'
+              } disabled:opacity-60 disabled:cursor-not-allowed`}
+            >
+              {saved ? <><Check size={14} /> Saved</> : routingSaving ? 'Saving…' : 'Save City Rules'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── How it works ── */}
+      <div className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] px-5 py-4 mt-4">
+        <p className="text-sm font-semibold text-[#0F172A] mb-2">How it works</p>
+        <ul className="space-y-1 text-xs text-[#475569] leading-relaxed list-disc pl-5">
+          {isAutoMode ? (
+            <>
+              <li>City rules are checked first. Leads from a matched city go straight to the chosen rep.</li>
+              <li>All other leads round-robin across active reps — the one who has waited longest gets the next lead.</li>
+              <li>The rep sees a "New Lead Assigned" popup the moment they're auto-assigned.</li>
+              <li>Reps placing a dialer call still self-own that lead. Incoming call leads go to whoever answered.</li>
+            </>
+          ) : (
+            <>
+              <li>New leads arrive unassigned on the manager's Leads page.</li>
+              <li>Managers hand-pick the owner for each lead.</li>
+              <li>Reps can transfer a lead they own to another rep.</li>
+              <li>Switch to Round Robin to automate this.</li>
+            </>
+          )}
+        </ul>
+      </div>
     </SectionShell>
   )
 
