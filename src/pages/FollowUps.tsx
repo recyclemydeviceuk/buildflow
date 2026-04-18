@@ -43,7 +43,18 @@ export default function FollowUps() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const isManager = user?.role === 'manager'
-  const [followUps, setFollowUps] = useState<FollowUpRecord[]>([])
+
+  // Split data by status so we can lazy-load only the bucket the user is viewing.
+  // Previously we sequentially fetched EVERY page of EVERY follow-up before rendering,
+  // which made the page unusable once counts grew into the thousands.
+  const [pendingFollowUps, setPendingFollowUps] = useState<FollowUpRecord[]>([])
+  const [completedFollowUps, setCompletedFollowUps] = useState<FollowUpRecord[]>([])
+  const [cancelledFollowUps, setCancelledFollowUps] = useState<FollowUpRecord[]>([])
+  const [completedTotal, setCompletedTotal] = useState(0)
+  const [cancelledTotal, setCancelledTotal] = useState(0)
+  const [completedLoaded, setCompletedLoaded] = useState(false)
+  const [cancelledLoaded, setCancelledLoaded] = useState(false)
+
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [search, setSearch] = useState('')
@@ -52,44 +63,75 @@ export default function FollowUps() {
   const [page, setPage] = useState(1)
   const [todayFirst, setTodayFirst] = useState(false)
 
-  const fetchFollowUps = async (background = false) => {
+  // Fetch only the ACTIVE (pending) follow-ups on mount. Completed/cancelled are
+  // lazy-loaded when the user clicks their tab — they're historical and rarely
+  // scanned, so there's no point paying that cost upfront.
+  const fetchPending = async (background = false) => {
     try {
       if (!background) setLoading(true)
-      // Fetch all pages so pending follow-ups aren't cut off by old completed ones
-      const allFollowUps: FollowUpRecord[] = []
-      let currentPage = 1
-      let hasMore = true
-      while (hasMore) {
-        const response = await followUpsAPI.getFollowUps({ page: String(currentPage), limit: '200' })
-        if (response.success) {
-          allFollowUps.push(...response.data)
-          hasMore = response.data.length === 200 && currentPage < (response.pagination?.pages || 1)
-          currentPage++
-        } else {
-          hasMore = false
-        }
-      }
-      setFollowUps(allFollowUps)
+      const res = await followUpsAPI.getFollowUps({ page: '1', limit: '200', status: 'pending' })
+      if (res.success) setPendingFollowUps(res.data)
     } catch (error) {
-      console.error('Failed to fetch follow-ups:', error)
+      console.error('Failed to fetch pending follow-ups:', error)
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
   }
 
-  useEffect(() => {
-    void fetchFollowUps()
-  }, [])
+  const fetchCompleted = async () => {
+    try {
+      const res = await followUpsAPI.getFollowUps({ page: '1', limit: '100', status: 'completed' })
+      if (res.success) {
+        setCompletedFollowUps(res.data)
+        setCompletedTotal(res.pagination?.total || res.data.length)
+        setCompletedLoaded(true)
+      }
+    } catch (error) {
+      console.error('Failed to fetch completed follow-ups:', error)
+    }
+  }
+
+  const fetchCancelled = async () => {
+    try {
+      const res = await followUpsAPI.getFollowUps({ page: '1', limit: '100', status: 'cancelled' })
+      if (res.success) {
+        setCancelledFollowUps(res.data)
+        setCancelledTotal(res.pagination?.total || res.data.length)
+        setCancelledLoaded(true)
+      }
+    } catch (error) {
+      console.error('Failed to fetch cancelled follow-ups:', error)
+    }
+  }
+
+  const refreshAll = async (background = false) => {
+    await fetchPending(background)
+    if (completedLoaded) void fetchCompleted()
+    if (cancelledLoaded) void fetchCancelled()
+  }
 
   useEffect(() => {
+    void fetchPending()
+  }, [])
+
+  // Lazy-load completed/cancelled only when the user actually switches to that tab
+  useEffect(() => {
+    if (activeTab === 'completed' && !completedLoaded) void fetchCompleted()
+    if (activeTab === 'cancelled' && !cancelledLoaded) void fetchCancelled()
+  }, [activeTab, completedLoaded, cancelledLoaded])
+
+  // Reduced poll interval from 60s → 180s (3 min). We still refetch on window focus
+  // so reps see fresh data when they come back, but we stop hammering the DB while
+  // the tab is sitting idle in the background.
+  useEffect(() => {
     const intervalId = window.setInterval(() => {
-      void fetchFollowUps(true)
-    }, 60000)
+      void fetchPending(true)
+    }, 180000)
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        void fetchFollowUps(true)
+        void fetchPending(true)
       }
     }
 
@@ -103,16 +145,40 @@ export default function FollowUps() {
     }
   }, [])
 
+  // Combined list for "All" tab + filtering
+  const followUps = useMemo(() => {
+    return [...pendingFollowUps, ...completedFollowUps, ...cancelledFollowUps]
+  }, [pendingFollowUps, completedFollowUps, cancelledFollowUps])
+
+  // Bucket counts for the tab badges.
+  // Pending-derived buckets (overdue / due-soon / upcoming) are computed from the
+  // in-memory pending array. Completed/cancelled use the server's pagination total
+  // so the badge is accurate even before the user has opened that tab.
   const counts: Record<FollowUpBucket, number> = useMemo(
-    () => ({
-      all: followUps.length,
-      overdue: followUps.filter((followUp) => getFollowUpBucket(followUp) === 'overdue').length,
-      'due-soon': followUps.filter((followUp) => getFollowUpBucket(followUp) === 'due-soon').length,
-      upcoming: followUps.filter((followUp) => getFollowUpBucket(followUp) === 'upcoming').length,
-      completed: followUps.filter((followUp) => getFollowUpBucket(followUp) === 'completed').length,
-      cancelled: followUps.filter((followUp) => getFollowUpBucket(followUp) === 'cancelled').length,
-    }),
-    [followUps]
+    () => {
+      const pendingCounts = {
+        overdue: 0,
+        'due-soon': 0,
+        upcoming: 0,
+      }
+      for (const fu of pendingFollowUps) {
+        const b = getFollowUpBucket(fu)
+        if (b === 'overdue') pendingCounts.overdue++
+        else if (b === 'due-soon') pendingCounts['due-soon']++
+        else if (b === 'upcoming') pendingCounts.upcoming++
+      }
+      const completed = completedLoaded ? completedFollowUps.length : completedTotal
+      const cancelled = cancelledLoaded ? cancelledFollowUps.length : cancelledTotal
+      return {
+        all: pendingFollowUps.length + completed + cancelled,
+        overdue: pendingCounts.overdue,
+        'due-soon': pendingCounts['due-soon'],
+        upcoming: pendingCounts.upcoming,
+        completed,
+        cancelled,
+      }
+    },
+    [pendingFollowUps, completedFollowUps, cancelledFollowUps, completedLoaded, cancelledLoaded, completedTotal, cancelledTotal]
   )
 
   const filteredFollowUps = useMemo(() => {
@@ -231,7 +297,7 @@ export default function FollowUps() {
 
   const handleRefresh = async () => {
     setRefreshing(true)
-    await fetchFollowUps(true)
+    await refreshAll(true)
   }
 
   const handleMarkDone = async (followUp: FollowUpRecord) => {
@@ -239,7 +305,10 @@ export default function FollowUps() {
       setMarkingDoneIds((current) => new Set(current).add(followUp._id))
       const response = await leadsAPI.updateFollowUp(followUp.lead, followUp._id, { status: 'completed' })
       if (response.success) {
-        await fetchFollowUps(true)
+        // Optimistic local update — remove from pending, reset completed so the
+        // tab re-fetches fresh on next open. Avoids a full page refetch.
+        setPendingFollowUps((prev) => prev.filter((item) => item._id !== followUp._id))
+        setCompletedLoaded(false)
       }
     } catch (error) {
       console.error('Failed to mark follow-up done:', error)
