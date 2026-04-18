@@ -72,6 +72,9 @@ export interface Lead {
   utmTerm?: string | null
   utmContent?: string | null
   googleClickId?: string | null
+  /** External platform lead identifier (set by Make.com webhook — Meta leadgen id, WhatsApp msg id, etc.) */
+  externalId?: string | null
+  metaLeadId?: string | null
   /** All raw form fields captured from the website submission (label → value) */
   websiteFormData?: Record<string, string> | null
   createdAt: string

@@ -1081,6 +1081,14 @@ export default function LeadDetail() {
             <div className="flex items-center gap-2.5">
               <h1 className="text-sm font-bold text-[#0F172A]">{lead.name}</h1>
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#EFF6FF] text-[#1D4ED8]">{lead.source}</span>
+              {lead.externalId && lead.source?.toLowerCase() !== 'manual' && (
+                <span
+                  title="This lead was ingested via the Make.com automation bridge"
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-[#F5F3FF] text-[#6D28D9] border border-[#DDD6FE] uppercase tracking-wide"
+                >
+                  via Make.com
+                </span>
+              )}
             </div>
             <p className="text-xs text-[#94A3B8] mt-0.5">Lead ID: {lead._id} · Created {formatLeadCreatedAtLabel(lead.createdAt)}</p>
           </div>
