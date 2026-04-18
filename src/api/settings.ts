@@ -45,8 +45,10 @@ export interface FeatureControls {
 export interface CityAssignmentRule {
   _id?: string
   cities: string[]
-  userId: string
-  userName: string
+  /** Reps that leads from these cities should be rotated among. Length ≥ 1. */
+  userIds: string[]
+  /** Display names aligned positionally with userIds. */
+  userNames: string[]
 }
 
 export interface SettingsData {
@@ -151,7 +153,7 @@ export const settingsAPI = {
     return response.data
   },
 
-  updateCityAssignmentRules: async (rules: Array<{ cities: string[]; userId: string }>) => {
+  updateCityAssignmentRules: async (rules: Array<{ cities: string[]; userIds: string[] }>) => {
     const response = await client.patch('/settings/city-assignment-rules', { rules })
     return response.data
   },

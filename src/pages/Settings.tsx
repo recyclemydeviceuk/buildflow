@@ -1924,11 +1924,11 @@ const reps = teamMembers.filter((member) => member.role === 'representative' && 
     try {
       setRoutingSaving(true)
       setRoutingError('')
-      // Strip down to the payload shape the backend expects. The server will
-      // hydrate userName itself from the matching User document.
+      // Strip down to the payload shape the backend expects. Server hydrates
+      // userNames from the matching User documents.
       const payload = cityRules
-        .filter((rule) => rule.userId && rule.cities.length > 0)
-        .map((rule) => ({ userId: rule.userId, cities: rule.cities }))
+        .filter((rule) => rule.userIds.length > 0 && rule.cities.length > 0)
+        .map((rule) => ({ userIds: rule.userIds, cities: rule.cities }))
       const res = await settingsAPI.updateCityAssignmentRules(payload)
       if (res.success) {
         setCityRules(res.data?.leadRouting?.cityAssignmentRules || [])
@@ -1943,7 +1943,7 @@ const reps = teamMembers.filter((member) => member.role === 'representative' && 
   }
 
   const addCityRule = () => {
-    setCityRules((current) => [...current, { cities: [], userId: '', userName: '' }])
+    setCityRules((current) => [...current, { cities: [], userIds: [], userNames: [] }])
   }
 
   const removeCityRule = (index: number) => {
@@ -1963,10 +1963,31 @@ const reps = teamMembers.filter((member) => member.role === 'representative' && 
     )
   }
 
-  const setRuleRep = (index: number, userId: string) => {
+  const toggleRepOnRule = (index: number, userId: string) => {
     const rep = reps.find((r) => r.id === userId)
+    if (!rep) return
     setCityRules((current) =>
-      current.map((rule, i) => (i === index ? { ...rule, userId, userName: rep?.name || '' } : rule))
+      current.map((rule, i) => {
+        if (i !== index) return rule
+        const has = rule.userIds.includes(userId)
+        if (has) {
+          // Deselect — keep userIds and userNames positionally aligned.
+          const keptIds: string[] = []
+          const keptNames: string[] = []
+          rule.userIds.forEach((id, idx) => {
+            if (id !== userId) {
+              keptIds.push(id)
+              keptNames.push(rule.userNames[idx] || '')
+            }
+          })
+          return { ...rule, userIds: keptIds, userNames: keptNames }
+        }
+        return {
+          ...rule,
+          userIds: [...rule.userIds, userId],
+          userNames: [...rule.userNames, rep.name],
+        }
+      })
     )
   }
 
@@ -2121,20 +2142,41 @@ const reps = teamMembers.filter((member) => member.role === 'representative' && 
 
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wide text-[#94A3B8] mb-1.5">
-                      Assigns to
+                      Assigns to{' '}
+                      <span className="font-normal normal-case tracking-normal text-[10px] text-[#64748B]">
+                        (pick one or more — leads rotate among them)
+                      </span>
                     </label>
-                    <select
-                      value={rule.userId}
-                      onChange={(e) => setRuleRep(index, e.target.value)}
-                      className="w-full h-9 px-3 bg-white border border-[#E2E8F0] rounded-lg text-xs font-semibold text-[#334155] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/15 focus:border-[#1D4ED8]/50 hover:border-[#CBD5E1] transition-colors"
-                    >
-                      <option value="">Select a representative…</option>
-                      {reps.map((rep) => (
-                        <option key={rep.id} value={rep.id}>
-                          {rep.name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex flex-wrap gap-1.5">
+                      {reps.length === 0 ? (
+                        <p className="text-xs text-[#94A3B8] italic">
+                          No active representatives available.
+                        </p>
+                      ) : (
+                        reps.map((rep) => {
+                          const selected = rule.userIds.includes(rep.id)
+                          return (
+                            <button
+                              key={rep.id}
+                              type="button"
+                              onClick={() => toggleRepOnRule(index, rep.id)}
+                              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${
+                                selected
+                                  ? 'bg-[#16A34A] border-[#16A34A] text-white shadow-sm'
+                                  : 'bg-white border-[#E2E8F0] text-[#475569] hover:border-[#BBF7D0]'
+                              }`}
+                            >
+                              {rep.name}
+                            </button>
+                          )
+                        })
+                      )}
+                    </div>
+                    {rule.userIds.length > 1 && (
+                      <p className="text-[10px] text-[#16A34A] font-semibold mt-2">
+                        {rule.userIds.length} reps selected · leads will round-robin between them
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
