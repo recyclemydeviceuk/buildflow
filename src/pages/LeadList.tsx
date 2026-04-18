@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, MapPin, ChevronRight, ArrowUpDown, X, Plus, ChevronLeft, RefreshCw, Trash2, ToggleLeft, ToggleRight, Loader2, Download, User, ChevronDown, Clock, CalendarDays } from 'lucide-react'
+import { Search, MapPin, ChevronRight, ArrowUpDown, X, Plus, ChevronLeft, RefreshCw, Trash2, ToggleLeft, ToggleRight, Loader2, Download, User, ChevronDown, Clock, CalendarDays, Check } from 'lucide-react'
 import { leadsAPI, type Lead } from '../api/leads'
 import type { LeadFieldConfig } from '../api/settings'
 import { callsAPI } from '../api/calls'
@@ -961,13 +961,16 @@ export default function LeadList() {
             <thead className="sticky top-0 z-10">
               <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
                 <th className="px-3 py-2.5 text-left text-[9px] font-bold text-[#94A3B8] uppercase tracking-wider whitespace-nowrap">
-                  <input
-                    type="checkbox"
-                    checked={allVisibleSelected}
-                    onChange={toggleSelectAllVisible}
-                    aria-label="Select all visible leads"
-                    className="h-3.5 w-3.5 rounded border-[#CBD5E1] text-[#1D4ED8] focus:ring-[#1D4ED8]"
-                  />
+                  <label className="relative inline-flex items-center justify-center cursor-pointer select-none align-middle">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={toggleSelectAllVisible}
+                      aria-label="Select all visible leads"
+                      className="peer h-[18px] w-[18px] appearance-none rounded-[6px] border-[1.5px] border-[#CBD5E1] bg-white transition-all duration-200 cursor-pointer hover:border-[#3B82F6] hover:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] checked:border-[#1D4ED8] checked:bg-gradient-to-br checked:from-[#3B82F6] checked:to-[#1D4ED8] checked:shadow-[0_2px_6px_rgba(29,78,216,0.3)] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/30"
+                    />
+                    <Check size={11} strokeWidth={3.5} className="absolute text-white opacity-0 scale-50 transition-all duration-150 peer-checked:opacity-100 peer-checked:scale-100 pointer-events-none" />
+                  </label>
                 </th>
                 {['Lead', 'Source', 'City', 'Owner', 'Disposition', 'DATE', isManager ? 'Actions' : '', ''].filter(Boolean).map((heading) => (
                   <th
@@ -1065,13 +1068,16 @@ export default function LeadList() {
                       onClick={() => navigate(`/leads/${lead._id}`)}
                     >
                       <td className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selectedLeadIds.includes(lead._id)}
-                          onChange={() => toggleLeadSelection(lead._id)}
-                          aria-label={`Select ${lead.name}`}
-                          className="h-3.5 w-3.5 rounded border-[#CBD5E1] text-[#1D4ED8] focus:ring-[#1D4ED8]"
-                        />
+                        <label className="relative inline-flex items-center justify-center cursor-pointer select-none align-middle">
+                          <input
+                            type="checkbox"
+                            checked={selectedLeadIds.includes(lead._id)}
+                            onChange={() => toggleLeadSelection(lead._id)}
+                            aria-label={`Select ${lead.name}`}
+                            className="peer h-[18px] w-[18px] appearance-none rounded-[6px] border-[1.5px] border-[#CBD5E1] bg-white transition-all duration-200 cursor-pointer hover:border-[#3B82F6] hover:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] checked:border-[#1D4ED8] checked:bg-gradient-to-br checked:from-[#3B82F6] checked:to-[#1D4ED8] checked:shadow-[0_2px_6px_rgba(29,78,216,0.3)] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/30"
+                          />
+                          <Check size={11} strokeWidth={3.5} className="absolute text-white opacity-0 scale-50 transition-all duration-150 peer-checked:opacity-100 peer-checked:scale-100 pointer-events-none" />
+                        </label>
                       </td>
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-2">
