@@ -1081,14 +1081,33 @@ export default function LeadDetail() {
             <div className="flex items-center gap-2.5">
               <h1 className="text-sm font-bold text-[#0F172A]">{lead.name}</h1>
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#EFF6FF] text-[#1D4ED8]">{lead.source}</span>
-              {lead.externalId && lead.source?.toLowerCase() !== 'manual' && (
-                <span
-                  title="This lead was ingested via the Make.com automation bridge"
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-[#F5F3FF] text-[#6D28D9] border border-[#DDD6FE] uppercase tracking-wide"
-                >
-                  via Make.com
-                </span>
-              )}
+              {(() => {
+                // "via Make.com" should only appear for sources that ACTUALLY route
+                // through the Make.com bridge. Anything with a dedicated native
+                // webhook (Website, Google ADS, LinkedIn) is ingested directly by
+                // BuildFlow — NOT through Make — even though Make can populate
+                // externalId as a side effect in some scenarios. Explicit exclude
+                // list keeps the badge honest.
+                const src = (lead.source || '').toLowerCase().trim()
+                const NATIVE_WEBHOOK_SOURCES = new Set([
+                  'website',
+                  'manual',
+                  'direct',
+                  'referral',
+                  'google ads',
+                  'google-ads',
+                  'linkedin',
+                ])
+                if (!lead.externalId || NATIVE_WEBHOOK_SOURCES.has(src)) return null
+                return (
+                  <span
+                    title="This lead was ingested via the Make.com automation bridge"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-[#F5F3FF] text-[#6D28D9] border border-[#DDD6FE] uppercase tracking-wide"
+                  >
+                    via Make.com
+                  </span>
+                )
+              })()}
             </div>
             <p className="text-xs text-[#94A3B8] mt-0.5">Lead ID: {lead._id} · Created {formatLeadCreatedAtLabel(lead.createdAt)}</p>
           </div>
