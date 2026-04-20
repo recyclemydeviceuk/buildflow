@@ -11,6 +11,12 @@ import CreatedAtEditor, { formatDateTimeLocalInput } from '../components/leads/C
 import ManualLeadModal from '../components/leads/ManualLeadModal'
 import ExportLeadsModal from '../components/leads/ExportLeadsModal'
 import RepresentativePicker, { type RepresentativePickerOption } from '../components/leads/RepresentativePicker'
+import LeadColumnManager, {
+  loadLeadColumnConfig,
+  saveLeadColumnConfig,
+  type LeadColumnConfig,
+  type LeadColumnKey,
+} from '../components/leads/LeadColumnManager'
 import DateRangePicker, { type DateRange } from '../components/common/DateRangePicker'
 import { useAuth } from '../context/AuthContext'
 import { useSocket } from '../context/SocketContext'
@@ -154,6 +160,20 @@ export default function LeadList() {
   const leadListRequestVersionRef = useRef(0)
   const featureControls = useFeatureControls()
   const [showMyLeadsOnly, setShowMyLeadsOnly] = useState(false)
+
+  // Per-user column ordering + visibility, persisted to localStorage so it
+  // survives reloads and navigations.
+  const [columnConfig, setColumnConfig] = useState<LeadColumnConfig[]>(() => loadLeadColumnConfig())
+  const handleColumnConfigChange = (next: LeadColumnConfig[]) => {
+    setColumnConfig(next)
+    saveLeadColumnConfig(next)
+  }
+  // Derive visible ordered column keys once per render to simplify the JSX below.
+  const visibleColumnKeys = columnConfig.filter((c) => c.visible).map((c) => c.key)
+  // The Actions column is manager-only regardless of the user's preference.
+  const effectiveColumnKeys = visibleColumnKeys.filter((k) => k !== 'actions' || isManager)
+  // Total span for empty/loading rows: 1 (checkbox col) + visible columns + 1 (trailing chevron)
+  const tableColSpan = 1 + effectiveColumnKeys.length + 1
 
   const [dispositions, setDispositions] = useState<string[]>([
     'All',
@@ -763,6 +783,286 @@ export default function LeadList() {
     }
   })
 
+  // ── Column-driven table rendering ────────────────────────────────────────
+  // Each visible column's header (<th>) and per-row cell (<td>) are produced
+  // by these two helpers. The order + visibility come from columnConfig, which
+  // the user can customize via the LeadColumnManager popover above the table.
+  const renderColumnHeader = (key: LeadColumnKey) => {
+    if (key === 'date') {
+      return (
+        <th key={key} className="px-3 py-2.5 text-left text-[9px] font-bold text-[#94A3B8] uppercase tracking-wider whitespace-nowrap">
+          <div className="flex items-center gap-1.5">
+            <div ref={dateModeDropdownRef} className="relative">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setDateModeDropdownOpen((o) => !o) }}
+                className="flex items-center gap-1 px-2 py-1 rounded-md bg-[#EFF6FF] border border-[#BFDBFE] text-[#1D4ED8] text-[9px] font-bold uppercase tracking-wider hover:bg-[#DBEAFE] transition-colors"
+              >
+                {dateMode === 'updatedAt'
+                  ? <><Clock size={9} className="shrink-0" /> Last Edit</>
+                  : <><CalendarDays size={9} className="shrink-0" /> Created At</>
+                }
+                <ChevronDown size={9} className={`shrink-0 transition-transform duration-150 ${dateModeDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {dateModeDropdownOpen && (
+                <div className="absolute top-full left-0 mt-1.5 w-36 bg-white border border-[#E2E8F0] rounded-xl shadow-lg z-50 overflow-hidden">
+                  <div className="px-2.5 py-1.5 border-b border-[#F1F5F9]">
+                    <p className="text-[8px] font-bold text-[#94A3B8] uppercase tracking-wider">Show date</p>
+                  </div>
+                  <div className="p-1">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setDateMode('updatedAt'); setDateModeDropdownOpen(false) }}
+                      className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[10px] font-semibold transition-colors ${dateMode === 'updatedAt' ? 'bg-[#EFF6FF] text-[#1D4ED8]' : 'text-[#475569] hover:bg-[#F8FAFC]'}`}
+                    >
+                      <Clock size={11} className="shrink-0" />
+                      Last Edit
+                      {dateMode === 'updatedAt' && (<span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#1D4ED8]" />)}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setDateMode('createdAt'); setDateModeDropdownOpen(false) }}
+                      className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[10px] font-semibold transition-colors ${dateMode === 'createdAt' ? 'bg-[#EFF6FF] text-[#1D4ED8]' : 'text-[#475569] hover:bg-[#F8FAFC]'}`}
+                    >
+                      <CalendarDays size={11} className="shrink-0" />
+                      Created At
+                      {dateMode === 'createdAt' && (<span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#1D4ED8]" />)}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <ArrowUpDown size={10} className="opacity-50" />
+          </div>
+        </th>
+      )
+    }
+    const labels: Record<LeadColumnKey, string> = {
+      lead: 'Lead',
+      source: 'Source',
+      city: 'City',
+      owner: 'Owner',
+      disposition: 'Disposition',
+      followup: 'Follow Up',
+      date: 'Date',
+      actions: 'Actions',
+    }
+    return (
+      <th key={key} className="px-3 py-2.5 text-left text-[9px] font-bold text-[#94A3B8] uppercase tracking-wider whitespace-nowrap">
+        {key === 'actions' ? (
+          'Actions'
+        ) : (
+          <div className="flex items-center gap-1">
+            {labels[key]} <ArrowUpDown size={10} className="opacity-50" />
+          </div>
+        )}
+      </th>
+    )
+  }
+
+  const renderColumnCell = (key: LeadColumnKey, lead: Lead, dc: { bg: string; text: string }) => {
+    switch (key) {
+      case 'lead':
+        return (
+          <td key={key} className="px-3 py-2.5">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-[#EFF6FF] flex items-center justify-center text-[#1D4ED8] text-[10px] font-bold shrink-0">
+                {lead.name.split(' ').map((part) => part[0]).join('').slice(0, 2)}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-[#0F172A] truncate max-w-[130px]">{lead.name}</p>
+                <p className="text-[10px] text-[#94A3B8]">{lead.phone}</p>
+              </div>
+            </div>
+          </td>
+        )
+      case 'source':
+        return (
+          <td key={key} className="px-3 py-2.5">
+            <span className="text-[11px] font-semibold" style={{ color: sourceColors[lead.source] || '#94A3B8' }}>
+              {lead.source}
+            </span>
+          </td>
+        )
+      case 'city':
+        return (
+          <td key={key} className="px-3 py-2.5">
+            <div className="flex items-center gap-1">
+              <MapPin size={10} className="text-[#94A3B8]" />
+              <span className="text-[11px] text-[#475569]">{lead.city}</span>
+            </div>
+          </td>
+        )
+      case 'owner':
+        return (
+          <td key={key} className="px-3 py-2.5">
+            {isLeadOwnerOfRow(lead) ? (
+              <div onClick={(event) => event.stopPropagation()}>
+                <RepresentativePicker
+                  value={lead.owner ? String(lead.owner) : null}
+                  onChange={(nextValue) => { handleAssignLead(lead._id, nextValue) }}
+                  options={representatives}
+                  allowUnassigned={isManager}
+                  disabled={assigningLeadId === lead._id}
+                  compact
+                />
+              </div>
+            ) : (
+              <div
+                onClick={(e) => { e.stopPropagation(); showOwnershipError() }}
+                className="flex items-center gap-1.5 cursor-not-allowed group"
+                title="Only the lead owner can transfer this lead"
+              >
+                <div className="w-6 h-6 rounded-md bg-[#E2E8F0] flex items-center justify-center text-[#475569] text-[9px] font-bold shrink-0">
+                  {lead.ownerName ? lead.ownerName.split(' ').map((p) => p[0]).join('') : '?'}
+                </div>
+                <span className="text-[11px] font-medium text-[#475569] truncate max-w-[80px]">
+                  {lead.ownerName || 'Unassigned'}
+                </span>
+                <svg className="w-3 h-3 text-[#CBD5E1] shrink-0 group-hover:text-[#F59E0B] transition-colors" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                </svg>
+              </div>
+            )}
+          </td>
+        )
+      case 'disposition':
+        return (
+          <td key={key} className="px-3 py-2.5">
+            <span
+              className="px-2 py-0.5 rounded-full text-[9px] font-bold"
+              style={{ background: dc.bg, color: dc.text }}
+            >
+              {lead.disposition}
+            </span>
+          </td>
+        )
+      case 'followup': {
+        const isTerminal =
+          lead.disposition === 'Failed' ||
+          lead.disposition === 'Booking Done' ||
+          lead.disposition === 'Agreement Done'
+        return (
+          <td key={key} className="px-3 py-2.5">
+            {lead.nextFollowUp ? (() => {
+              const d = new Date(lead.nextFollowUp)
+              const isOverdue = d.getTime() < Date.now()
+              return (
+                <div className="flex flex-col">
+                  <span className={`text-[10px] font-bold whitespace-nowrap ${isOverdue ? 'text-[#DC2626]' : 'text-[#0F172A]'}`}>
+                    {d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                  <span className="text-[9px] text-[#94A3B8] whitespace-nowrap">
+                    {d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
+                    {isOverdue && <span className="ml-1.5 font-bold text-[#DC2626]">Overdue</span>}
+                  </span>
+                </div>
+              )
+            })() : isTerminal ? (
+              <span className="text-[10px] text-[#CBD5E1]" title="Terminal stage — no follow-up required">—</span>
+            ) : (
+              <span
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-[#FEF2F2] text-[#B91C1C] border border-[#FECACA]"
+                title="No follow-up date set"
+              >
+                NA
+              </span>
+            )}
+          </td>
+        )
+      }
+      case 'date':
+        return (
+          <td key={key} className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
+            {editingCreatedAtLeadId === lead._id ? (
+              <div
+                className="space-y-2 min-w-[280px] max-w-[320px]"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') { event.preventDefault(); void handleSaveCreatedAt(lead) }
+                  if (event.key === 'Escape') { event.preventDefault(); cancelEditingCreatedAt() }
+                }}
+              >
+                <CreatedAtEditor
+                  key={`${lead._id}-${createdAtEditorVersion}`}
+                  compact
+                  value={createdAtDraft}
+                  onChange={setCreatedAtDraft}
+                  helperText="Adjust the local date, time, and year."
+                />
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveCreatedAt(lead)}
+                    disabled={savingCreatedAtLeadId === lead._id || createdAtDraft === formatDateTimeLocalInput(lead.createdAt)}
+                    className="px-3 py-1.5 rounded-lg bg-[#1D4ED8] text-white text-[10px] font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {savingCreatedAtLeadId === lead._id ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelEditingCreatedAt}
+                    disabled={savingCreatedAtLeadId === lead._id}
+                    className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] bg-white text-[#64748B] text-[10px] font-bold hover:bg-[#F8FAFC] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                <div className="flex flex-col">
+                  {dateMode === 'updatedAt' && (
+                    <span className="text-[8px] font-semibold text-[#94A3B8] uppercase tracking-wide mb-0.5">Last Edit</span>
+                  )}
+                  <span className="text-[10px] font-medium text-[#475569] whitespace-nowrap">
+                    {new Date(dateMode === 'updatedAt' ? lead.updatedAt : lead.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                  <span className="text-[9px] text-[#94A3B8] whitespace-nowrap">
+                    {new Date(dateMode === 'updatedAt' ? lead.updatedAt : lead.createdAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
+                  </span>
+                </div>
+                {canEditCreatedAt && dateMode === 'createdAt' ? (
+                  <button
+                    type="button"
+                    onClick={() => startEditingCreatedAt(lead)}
+                    className="w-fit px-2 py-1 rounded-md border border-[#DBEAFE] bg-[#EFF6FF] text-[#1D4ED8] text-[9px] font-bold hover:bg-[#DBEAFE] transition-colors"
+                  >
+                    Edit
+                  </button>
+                ) : null}
+              </div>
+            )}
+          </td>
+        )
+      case 'actions':
+        return (
+          <td key={key} className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
+            {isManager ? (
+              <button
+                type="button"
+                onClick={() => void handleDeleteLead(lead)}
+                disabled={deletingLeadId === lead._id}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] text-[10px] font-bold hover:bg-[#FEE2E2] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <Trash2 size={11} />
+                {deletingLeadId === lead._id ? '…' : 'Delete'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => navigate(`/leads/${lead._id}`)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8] text-[10px] font-bold hover:bg-[#DBEAFE] transition-colors"
+              >
+                View
+              </button>
+            )}
+          </td>
+        )
+      default:
+        return null
+    }
+  }
+
   return (
     <div className="h-screen bg-[#F8FAFC] flex flex-col">
       {/* Ownership toast — shown when a non-owner rep tries to transfer a lead */}
@@ -813,6 +1113,9 @@ export default function LeadList() {
               <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
               Refresh
             </button>
+
+            {/* Column manager — drag to reorder, eye toggle to show/hide */}
+            <LeadColumnManager value={columnConfig} onChange={handleColumnConfigChange} />
 
             {paginationMode === 'on' && (
               /* Pagination — dark segmented control, visually distinct from action buttons */
@@ -998,81 +1301,19 @@ export default function LeadList() {
                     <Check size={11} strokeWidth={3.5} className="absolute text-white opacity-0 scale-50 transition-all duration-150 peer-checked:opacity-100 peer-checked:scale-100 pointer-events-none" />
                   </label>
                 </th>
-                {['Lead', 'Source', 'City', 'Owner', 'Disposition', 'Follow Up', 'DATE', isManager ? 'Actions' : '', ''].filter(Boolean).map((heading) => (
-                  <th
-                    key={heading}
-                    className="px-3 py-2.5 text-left text-[9px] font-bold text-[#94A3B8] uppercase tracking-wider whitespace-nowrap"
-                  >
-                    {heading === 'DATE' ? (
-                      <div className="flex items-center gap-1.5">
-                        <div ref={dateModeDropdownRef} className="relative">
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setDateModeDropdownOpen((o) => !o) }}
-                            className="flex items-center gap-1 px-2 py-1 rounded-md bg-[#EFF6FF] border border-[#BFDBFE] text-[#1D4ED8] text-[9px] font-bold uppercase tracking-wider hover:bg-[#DBEAFE] transition-colors"
-                          >
-                            {dateMode === 'updatedAt'
-                              ? <><Clock size={9} className="shrink-0" /> Last Edit</>
-                              : <><CalendarDays size={9} className="shrink-0" /> Created At</>
-                            }
-                            <ChevronDown size={9} className={`shrink-0 transition-transform duration-150 ${dateModeDropdownOpen ? 'rotate-180' : ''}`} />
-                          </button>
-
-                          {dateModeDropdownOpen && (
-                            <div className="absolute top-full left-0 mt-1.5 w-36 bg-white border border-[#E2E8F0] rounded-xl shadow-lg z-50 overflow-hidden">
-                              <div className="px-2.5 py-1.5 border-b border-[#F1F5F9]">
-                                <p className="text-[8px] font-bold text-[#94A3B8] uppercase tracking-wider">Show date</p>
-                              </div>
-                              <div className="p-1">
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); setDateMode('updatedAt'); setDateModeDropdownOpen(false) }}
-                                  className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[10px] font-semibold transition-colors ${dateMode === 'updatedAt' ? 'bg-[#EFF6FF] text-[#1D4ED8]' : 'text-[#475569] hover:bg-[#F8FAFC]'}`}
-                                >
-                                  <Clock size={11} className="shrink-0" />
-                                  Last Edit
-                                  {dateMode === 'updatedAt' && (
-                                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#1D4ED8]" />
-                                  )}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); setDateMode('createdAt'); setDateModeDropdownOpen(false) }}
-                                  className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[10px] font-semibold transition-colors ${dateMode === 'createdAt' ? 'bg-[#EFF6FF] text-[#1D4ED8]' : 'text-[#475569] hover:bg-[#F8FAFC]'}`}
-                                >
-                                  <CalendarDays size={11} className="shrink-0" />
-                                  Created At
-                                  {dateMode === 'createdAt' && (
-                                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#1D4ED8]" />
-                                  )}
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        <ArrowUpDown size={10} className="opacity-50" />
-                      </div>
-                    ) : heading && heading !== 'Actions' ? (
-                      <div className="flex items-center gap-1">
-                        {heading} <ArrowUpDown size={10} className="opacity-50" />
-                      </div>
-                    ) : heading === 'Actions' ? (
-                      'Actions'
-                    ) : null}
-                  </th>
-                ))}
+                {effectiveColumnKeys.map((key) => renderColumnHeader(key))}
               </tr>
             </thead>
             <tbody className="bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="px-6 py-20 text-center">
+                  <td colSpan={tableColSpan} className="px-6 py-20 text-center">
                     <p className="text-[#94A3B8] text-sm italic">Loading leads...</p>
                   </td>
                 </tr>
               ) : (paginationMode === 'on' ? leads : infiniteLeads).length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-6 py-20 text-center">
+                  <td colSpan={tableColSpan} className="px-6 py-20 text-center">
                     <p className="text-[#94A3B8] text-sm">No leads found.</p>
                     <p className="text-[#94A3B8] text-xs mt-1">
                       {isManager
@@ -1105,222 +1346,7 @@ export default function LeadList() {
                           <Check size={11} strokeWidth={3.5} className="absolute text-white opacity-0 scale-50 transition-all duration-150 peer-checked:opacity-100 peer-checked:scale-100 pointer-events-none" />
                         </label>
                       </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-lg bg-[#EFF6FF] flex items-center justify-center text-[#1D4ED8] text-[10px] font-bold shrink-0">
-                            {lead.name.split(' ').map((part) => part[0]).join('').slice(0, 2)}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold text-[#0F172A] truncate max-w-[130px]">{lead.name}</p>
-                            <p className="text-[10px] text-[#94A3B8]">{lead.phone}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span className="text-[11px] font-semibold" style={{ color: sourceColors[lead.source] || '#94A3B8' }}>
-                          {lead.source}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-1">
-                          <MapPin size={10} className="text-[#94A3B8]" />
-                          <span className="text-[11px] text-[#475569]">{lead.city}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        {isLeadOwnerOfRow(lead) ? (
-                          /* Owner or manager — full interactive picker */
-                          <div onClick={(event) => event.stopPropagation()}>
-                            <RepresentativePicker
-                              value={lead.owner ? String(lead.owner) : null}
-                              onChange={(nextValue) => { handleAssignLead(lead._id, nextValue) }}
-                              options={representatives}
-                              allowUnassigned={isManager}
-                              disabled={assigningLeadId === lead._id}
-                              compact
-                            />
-                          </div>
-                        ) : (
-                          /* Non-owner rep — read-only display, click shows toast */
-                          <div
-                            onClick={(e) => { e.stopPropagation(); showOwnershipError() }}
-                            className="flex items-center gap-1.5 cursor-not-allowed group"
-                            title="Only the lead owner can transfer this lead"
-                          >
-                            <div className="w-6 h-6 rounded-md bg-[#E2E8F0] flex items-center justify-center text-[#475569] text-[9px] font-bold shrink-0">
-                              {lead.ownerName ? lead.ownerName.split(' ').map((p) => p[0]).join('') : '?'}
-                            </div>
-                            <span className="text-[11px] font-medium text-[#475569] truncate max-w-[80px]">
-                              {lead.ownerName || 'Unassigned'}
-                            </span>
-                            <svg className="w-3 h-3 text-[#CBD5E1] shrink-0 group-hover:text-[#F59E0B] transition-colors" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span
-                          className="px-2 py-0.5 rounded-full text-[9px] font-bold"
-                          style={{ background: dc.bg, color: dc.text }}
-                        >
-                          {lead.disposition}
-                        </span>
-                      </td>
-                      {/* Follow Up column — shows scheduled date, 'NA' if missing (unless
-                          terminal disposition), or em-dash for terminal leads. */}
-                      <td className="px-3 py-2.5">
-                        {(() => {
-                          const isTerminal =
-                            lead.disposition === 'Failed' ||
-                            lead.disposition === 'Booking Done' ||
-                            lead.disposition === 'Agreement Done'
-                          if (lead.nextFollowUp) {
-                            const d = new Date(lead.nextFollowUp)
-                            const isOverdue = d.getTime() < Date.now()
-                            return (
-                              <div className="flex flex-col">
-                                <span
-                                  className={`text-[10px] font-bold whitespace-nowrap ${
-                                    isOverdue ? 'text-[#DC2626]' : 'text-[#0F172A]'
-                                  }`}
-                                >
-                                  {d.toLocaleDateString('en-IN', {
-                                    month: 'short',
-                                    day: 'numeric',
-                                    year: 'numeric',
-                                  })}
-                                </span>
-                                <span className="text-[9px] text-[#94A3B8] whitespace-nowrap">
-                                  {d.toLocaleTimeString('en-IN', {
-                                    hour: 'numeric',
-                                    minute: '2-digit',
-                                  })}
-                                  {isOverdue && (
-                                    <span className="ml-1.5 font-bold text-[#DC2626]">
-                                      Overdue
-                                    </span>
-                                  )}
-                                </span>
-                              </div>
-                            )
-                          }
-                          if (isTerminal) {
-                            return (
-                              <span
-                                className="text-[10px] text-[#CBD5E1]"
-                                title="Terminal stage — no follow-up required"
-                              >
-                                —
-                              </span>
-                            )
-                          }
-                          return (
-                            <span
-                              className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-[#FEF2F2] text-[#B91C1C] border border-[#FECACA]"
-                              title="No follow-up date set"
-                            >
-                              NA
-                            </span>
-                          )
-                        })()}
-                      </td>
-                      <td className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
-                        {editingCreatedAtLeadId === lead._id ? (
-                          <div
-                            className="space-y-2 min-w-[280px] max-w-[320px]"
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter') {
-                                event.preventDefault()
-                                void handleSaveCreatedAt(lead)
-                              }
-                              if (event.key === 'Escape') {
-                                event.preventDefault()
-                                cancelEditingCreatedAt()
-                              }
-                            }}
-                          >
-                            <CreatedAtEditor
-                              key={`${lead._id}-${createdAtEditorVersion}`}
-                              compact
-                              value={createdAtDraft}
-                              onChange={setCreatedAtDraft}
-                              helperText="Adjust the local date, time, and year."
-                            />
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => void handleSaveCreatedAt(lead)}
-                                disabled={savingCreatedAtLeadId === lead._id || createdAtDraft === formatDateTimeLocalInput(lead.createdAt)}
-                                className="px-3 py-1.5 rounded-lg bg-[#1D4ED8] text-white text-[10px] font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                              >
-                                {savingCreatedAtLeadId === lead._id ? 'Saving...' : 'Save'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={cancelEditingCreatedAt}
-                                disabled={savingCreatedAtLeadId === lead._id}
-                                className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] bg-white text-[#64748B] text-[10px] font-bold hover:bg-[#F8FAFC] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col gap-1">
-                            <div className="flex flex-col">
-                              {dateMode === 'updatedAt' && (
-                                <span className="text-[8px] font-semibold text-[#94A3B8] uppercase tracking-wide mb-0.5">
-                                  Last Edit
-                                </span>
-                              )}
-                              <span className="text-[10px] font-medium text-[#475569] whitespace-nowrap">
-                                {new Date(dateMode === 'updatedAt' ? lead.updatedAt : lead.createdAt).toLocaleDateString('en-IN', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  year: 'numeric',
-                                })}
-                              </span>
-                              <span className="text-[9px] text-[#94A3B8] whitespace-nowrap">
-                                {new Date(dateMode === 'updatedAt' ? lead.updatedAt : lead.createdAt).toLocaleTimeString('en-IN', {
-                                  hour: 'numeric',
-                                  minute: '2-digit',
-                                })}
-                              </span>
-                            </div>
-                            {canEditCreatedAt && dateMode === 'createdAt' ? (
-                              <button
-                                type="button"
-                                onClick={() => startEditingCreatedAt(lead)}
-                                className="w-fit px-2 py-1 rounded-md border border-[#DBEAFE] bg-[#EFF6FF] text-[#1D4ED8] text-[9px] font-bold hover:bg-[#DBEAFE] transition-colors"
-                              >
-                                Edit
-                              </button>
-                            ) : null}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
-                        {isManager ? (
-                          <button
-                            type="button"
-                            onClick={() => void handleDeleteLead(lead)}
-                            disabled={deletingLeadId === lead._id}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] text-[10px] font-bold hover:bg-[#FEE2E2] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                          >
-                            <Trash2 size={11} />
-                            {deletingLeadId === lead._id ? '…' : 'Delete'}
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/leads/${lead._id}`)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8] text-[10px] font-bold hover:bg-[#DBEAFE] transition-colors"
-                          >
-                            View
-                          </button>
-                        )}
-                      </td>
+                      {effectiveColumnKeys.map((key) => renderColumnCell(key, lead, dc))}
                       <td className="px-3 py-2.5 text-right">
                         <ChevronRight size={12} className="text-[#CBD5E1] inline" />
                       </td>
@@ -1331,7 +1357,7 @@ export default function LeadList() {
               {/* Loading more indicator for infinite scroll */}
               {paginationMode === 'off' && loadingMore && (
                 <tr>
-                  <td colSpan={10} className="px-6 py-4 text-center">
+                  <td colSpan={tableColSpan} className="px-6 py-4 text-center">
                     <div className="flex items-center justify-center gap-2 text-[#94A3B8]">
                       <Loader2 size={16} className="animate-spin" />
                       <span className="text-xs">Loading more leads...</span>
@@ -1342,7 +1368,7 @@ export default function LeadList() {
               {/* End of list indicator */}
               {paginationMode === 'off' && !hasMore && infiniteLeads.length > 0 && !loadingMore && (
                 <tr>
-                  <td colSpan={10} className="px-6 py-4 text-center">
+                  <td colSpan={tableColSpan} className="px-6 py-4 text-center">
                     <p className="text-[#94A3B8] text-xs">All leads loaded</p>
                   </td>
                 </tr>
