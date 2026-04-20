@@ -69,8 +69,20 @@ export default function FollowUps() {
   const fetchPending = async (background = false) => {
     try {
       if (!background) setLoading(true)
-      const res = await followUpsAPI.getFollowUps({ page: '1', limit: '200', status: 'pending' })
-      if (res.success) setPendingFollowUps(res.data)
+      // Fire three requests in parallel:
+      //   1) pending list (full data, limit 200)
+      //   2) completed count (limit 1 — we only need pagination.total)
+      //   3) cancelled count (limit 1 — we only need pagination.total)
+      // This way the tab badges + "Total follow-ups" card are accurate immediately,
+      // but we still avoid loading thousands of completed records upfront.
+      const [pendingRes, completedRes, cancelledRes] = await Promise.all([
+        followUpsAPI.getFollowUps({ page: '1', limit: '200', status: 'pending' }),
+        followUpsAPI.getFollowUps({ page: '1', limit: '1', status: 'completed' }),
+        followUpsAPI.getFollowUps({ page: '1', limit: '1', status: 'cancelled' }),
+      ])
+      if (pendingRes.success) setPendingFollowUps(pendingRes.data)
+      if (completedRes.success) setCompletedTotal(completedRes.pagination?.total || 0)
+      if (cancelledRes.success) setCancelledTotal(cancelledRes.pagination?.total || 0)
     } catch (error) {
       console.error('Failed to fetch pending follow-ups:', error)
     } finally {
