@@ -11,6 +11,7 @@ const normalizeUser = (raw: any): User => ({
   callDeviceMode: raw?.callDeviceMode || 'phone',
   activeCallSid: raw?.activeCallSid ?? null,
   isActive: raw?.isActive ?? true,
+  isDemo: Boolean(raw?.isDemo),
   avatarUrl: raw?.avatarUrl || undefined,
 })
 

@@ -29,6 +29,10 @@ export interface User {
   callDeviceMode?: 'phone' | 'web'
   activeCallSid?: string | null
   isActive?: boolean
+  // Read-only demo account. Backend rejects all non-GET requests for
+  // these users; the frontend shows a persistent banner and can disable
+  // write UI elements.
+  isDemo?: boolean
   avatarUrl?: string
   notificationPrefs?: NotificationPrefs
 }
@@ -57,6 +61,7 @@ const normalizeUser = (raw: any): User => ({
   callDeviceMode: raw?.callDeviceMode || 'phone',
   activeCallSid: raw?.activeCallSid ?? null,
   isActive: raw?.isActive ?? true,
+  isDemo: Boolean(raw?.isDemo),
   avatarUrl: raw?.avatarUrl || undefined,
   notificationPrefs: {
     ...DEFAULT_NOTIFICATION_PREFS,

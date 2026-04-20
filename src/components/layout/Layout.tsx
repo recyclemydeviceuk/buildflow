@@ -27,6 +27,20 @@ export default function Layout() {
   const [followUpPopup, setFollowUpPopup] = useState<FollowUpRecord | null>(null)
   const [assignmentQueue, setAssignmentQueue] = useState<PendingAssignment[]>([])
   const [assignmentResponding, setAssignmentResponding] = useState(false)
+  const [demoToast, setDemoToast] = useState<string | null>(null)
+
+  // Listen for demo-blocked events dispatched by the axios response interceptor
+  // (api/client.ts) whenever the backend rejects a write because the account is
+  // view-only. Surfaces a transient toast in the corner.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail || {}
+      setDemoToast(detail.message || 'Demo account is view-only.')
+      window.setTimeout(() => setDemoToast(null), 4000)
+    }
+    window.addEventListener('buildflow:demo-blocked', handler as EventListener)
+    return () => window.removeEventListener('buildflow:demo-blocked', handler as EventListener)
+  }, [])
 
   const currentAssignment = assignmentQueue[0] ?? null
 
@@ -205,8 +219,33 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen bg-[#F8FAFC] overflow-hidden">
+      {/* Demo blocked toast — bottom-center, fades automatically after 4s */}
+      {demoToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[80] px-5 py-3 rounded-xl bg-[#0F172A] text-white text-sm font-semibold shadow-[0_20px_60px_rgba(0,0,0,0.35)] flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FCA5A5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+          </svg>
+          {demoToast}
+        </div>
+      )}
       <Sidebar role={user?.role || 'representative'} collapsed={sidebarCollapsed} onToggle={handleSidebarToggle} />
       <main className={`flex-1 overflow-y-auto transition-all duration-300 ${sidebarCollapsed ? 'ml-[56px]' : 'ml-[200px]'}`}>
+        {/* Demo / read-only banner. Always visible at the top of every page when
+            the logged-in user is flagged as a demo account. The backend rejects
+            every non-GET request for these users, so this banner is our chance
+            to explain the restriction up front. */}
+        {user?.isDemo && (
+          <div className="sticky top-0 z-[60] bg-gradient-to-r from-[#F59E0B] via-[#F97316] to-[#EF4444] text-white text-xs font-bold px-4 py-2 flex items-center justify-center gap-2 shadow-md">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <span>DEMO MODE</span>
+            <span className="opacity-90 font-medium">— You're viewing BuildFlow in read-only mode. Editing, deleting, and creating are disabled.</span>
+          </div>
+        )}
         <Outlet />
       </main>
 
