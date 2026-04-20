@@ -118,6 +118,11 @@ export default function LeadList() {
   const [filterSource, setFilterSource] = useState<string>(persistedFilters.source)
   const [filterCity, setFilterCity] = useState<string>(persistedFilters.city)
   const [filterOwner, setFilterOwner] = useState<string>(persistedFilters.owner)
+  // Follow-up filter: 'All' shows everything; 'with' shows leads that have a scheduled follow-up;
+  // 'without' shows leads missing one (NA); 'overdue' shows leads whose next follow-up has passed.
+  // Terminal dispositions (Failed, Booking Done, Agreement Done) are never counted as
+  // missing — they don't need ongoing follow-ups.
+  const [filterFollowUp, setFilterFollowUp] = useState<string>('All')
   const [dateRange, setDateRange] = useState<DateRange>({
     from: persistedFilters.dateRange.from ? new Date(persistedFilters.dateRange.from) : null,
     to: persistedFilters.dateRange.to ? new Date(persistedFilters.dateRange.to) : null,
@@ -254,6 +259,7 @@ export default function LeadList() {
       if (filterSource !== 'All') params.source = filterSource
       if (filterCity !== 'All') params.city = filterCity
       if (isManager && filterOwner !== 'All') params.owner = filterOwner
+      if (filterFollowUp !== 'All') params.followUp = filterFollowUp
       // Reps see all leads by default; when "My Leads" mode is on, filter to their own
       if (!isManager && showMyLeadsOnly && user?.id) params.owner = user.id
 
@@ -271,7 +277,7 @@ export default function LeadList() {
 
       return params
     },
-    [search, filterDisposition, filterSource, filterCity, isManager, filterOwner, dateRange, showMyLeadsOnly, user?.id]
+    [search, filterDisposition, filterSource, filterCity, isManager, filterOwner, filterFollowUp, dateRange, showMyLeadsOnly, user?.id]
   )
 
   const fetchLeads = useCallback(
@@ -693,6 +699,13 @@ export default function LeadList() {
     description: city === 'All' ? 'Show every city' : 'Filter leads by city',
   }))
 
+  const followUpOptions: FancyDropdownOption[] = [
+    { value: 'All', label: 'All Follow-ups', description: 'Show every lead' },
+    { value: 'with', label: 'Has Follow-up', description: 'Leads with a scheduled next follow-up', dotColor: '#16A34A' },
+    { value: 'without', label: 'Missing (NA)', description: 'Active leads with no follow-up date set', dotColor: '#DC2626' },
+    { value: 'overdue', label: 'Overdue', description: 'Follow-up date is in the past', dotColor: '#F59E0B' },
+  ]
+
   const ownerOptions: FancyDropdownOption[] = owners.map((owner) => {
     const representative = representatives.find((member) => member.id === owner.id)
     let badgeLabel: string | undefined
@@ -918,6 +931,15 @@ export default function LeadList() {
             panelWidth={180}
           />
 
+          <FancyDropdown
+            value={filterFollowUp}
+            onChange={setFilterFollowUp}
+            options={followUpOptions}
+            placeholder="Follow-up"
+            minWidth={90}
+            panelWidth={240}
+          />
+
           {isManager ? (
             <FancyDropdown
               value={filterOwner}
@@ -976,7 +998,7 @@ export default function LeadList() {
                     <Check size={11} strokeWidth={3.5} className="absolute text-white opacity-0 scale-50 transition-all duration-150 peer-checked:opacity-100 peer-checked:scale-100 pointer-events-none" />
                   </label>
                 </th>
-                {['Lead', 'Source', 'City', 'Owner', 'Disposition', 'DATE', isManager ? 'Actions' : '', ''].filter(Boolean).map((heading) => (
+                {['Lead', 'Source', 'City', 'Owner', 'Disposition', 'Follow Up', 'DATE', isManager ? 'Actions' : '', ''].filter(Boolean).map((heading) => (
                   <th
                     key={heading}
                     className="px-3 py-2.5 text-left text-[9px] font-bold text-[#94A3B8] uppercase tracking-wider whitespace-nowrap"
@@ -1044,13 +1066,13 @@ export default function LeadList() {
             <tbody className="bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-20 text-center">
+                  <td colSpan={10} className="px-6 py-20 text-center">
                     <p className="text-[#94A3B8] text-sm italic">Loading leads...</p>
                   </td>
                 </tr>
               ) : (paginationMode === 'on' ? leads : infiniteLeads).length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-20 text-center">
+                  <td colSpan={10} className="px-6 py-20 text-center">
                     <p className="text-[#94A3B8] text-sm">No leads found.</p>
                     <p className="text-[#94A3B8] text-xs mt-1">
                       {isManager
@@ -1144,6 +1166,64 @@ export default function LeadList() {
                         >
                           {lead.disposition}
                         </span>
+                      </td>
+                      {/* Follow Up column — shows scheduled date, 'NA' if missing (unless
+                          terminal disposition), or em-dash for terminal leads. */}
+                      <td className="px-3 py-2.5">
+                        {(() => {
+                          const isTerminal =
+                            lead.disposition === 'Failed' ||
+                            lead.disposition === 'Booking Done' ||
+                            lead.disposition === 'Agreement Done'
+                          if (lead.nextFollowUp) {
+                            const d = new Date(lead.nextFollowUp)
+                            const isOverdue = d.getTime() < Date.now()
+                            return (
+                              <div className="flex flex-col">
+                                <span
+                                  className={`text-[10px] font-bold whitespace-nowrap ${
+                                    isOverdue ? 'text-[#DC2626]' : 'text-[#0F172A]'
+                                  }`}
+                                >
+                                  {d.toLocaleDateString('en-IN', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric',
+                                  })}
+                                </span>
+                                <span className="text-[9px] text-[#94A3B8] whitespace-nowrap">
+                                  {d.toLocaleTimeString('en-IN', {
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                  })}
+                                  {isOverdue && (
+                                    <span className="ml-1.5 font-bold text-[#DC2626]">
+                                      Overdue
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            )
+                          }
+                          if (isTerminal) {
+                            return (
+                              <span
+                                className="text-[10px] text-[#CBD5E1]"
+                                title="Terminal stage — no follow-up required"
+                              >
+                                —
+                              </span>
+                            )
+                          }
+                          return (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-[#FEF2F2] text-[#B91C1C] border border-[#FECACA]"
+                              title="No follow-up date set"
+                            >
+                              NA
+                            </span>
+                          )
+                        })()}
                       </td>
                       <td className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
                         {editingCreatedAtLeadId === lead._id ? (
@@ -1251,7 +1331,7 @@ export default function LeadList() {
               {/* Loading more indicator for infinite scroll */}
               {paginationMode === 'off' && loadingMore && (
                 <tr>
-                  <td colSpan={9} className="px-6 py-4 text-center">
+                  <td colSpan={10} className="px-6 py-4 text-center">
                     <div className="flex items-center justify-center gap-2 text-[#94A3B8]">
                       <Loader2 size={16} className="animate-spin" />
                       <span className="text-xs">Loading more leads...</span>
@@ -1262,7 +1342,7 @@ export default function LeadList() {
               {/* End of list indicator */}
               {paginationMode === 'off' && !hasMore && infiniteLeads.length > 0 && !loadingMore && (
                 <tr>
-                  <td colSpan={9} className="px-6 py-4 text-center">
+                  <td colSpan={10} className="px-6 py-4 text-center">
                     <p className="text-[#94A3B8] text-xs">All leads loaded</p>
                   </td>
                 </tr>
