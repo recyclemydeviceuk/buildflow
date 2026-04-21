@@ -2453,150 +2453,124 @@ export default function LeadDetail() {
             )}
           </div>
 
-          {/* Follow-up Timeline */}
+          {/* Call History — full log of every call made/received for this lead,
+              newest first. Replaces the old Follow-up Timeline on the right
+              panel because reps track follow-ups via the remarks section below.
+              Each entry shows date/time, duration, outcome, who made the call,
+              and an inline audio player when a recording exists. */}
           <div className="p-5">
             <div className="flex items-center justify-between mb-4">
-              <p className="text-xs font-bold text-[#0F172A]">Follow-up Timeline</p>
-              {isLeadOwner && (
-                <button
-                  onClick={() => setShowFollowUpForm(true)}
-                  className="text-[10px] font-semibold px-2.5 py-1 bg-[#1D4ED8] text-white rounded hover:bg-[#1E40AF] transition-colors"
-                >
-                  + Add
-                </button>
+              <p className="text-xs font-bold text-[#0F172A]">Call History</p>
+              {sortedCallHistory.length > 0 && (
+                <span className="text-[10px] font-bold text-[#64748B] bg-[#F1F5F9] px-2 py-0.5 rounded-full">
+                  {sortedCallHistory.length} {sortedCallHistory.length === 1 ? 'call' : 'calls'}
+                </span>
               )}
             </div>
 
-            {/* Follow-up Form */}
-            {showFollowUpForm && (
-              <div className="mb-4 p-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg">
-                <p className="text-xs font-semibold text-[#0F172A] mb-2">
-                  {editingFollowUpId ? 'Edit Follow-up' : 'New Follow-up'}
-                </p>
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <input
-                      type="date"
-                      value={followUpDate}
-                      onChange={(e) => setFollowUpDate(e.target.value)}
-                      className="flex-1 text-xs px-2 py-1.5 border border-[#E2E8F0] rounded focus:outline-none focus:ring-1 focus:ring-[#1D4ED8]"
-                    />
-                    <input
-                      type="time"
-                      value={followUpTime}
-                      onChange={(e) => setFollowUpTime(e.target.value)}
-                      className="flex-1 text-xs px-2 py-1.5 border border-[#E2E8F0] rounded focus:outline-none focus:ring-1 focus:ring-[#1D4ED8]"
-                    />
-                  </div>
-                  <textarea
-                    value={followUpNotes}
-                    onChange={(e) => setFollowUpNotes(e.target.value)}
-                    placeholder="Add notes..."
-                    rows={2}
-                    className="w-full text-xs px-2 py-1.5 border border-[#E2E8F0] rounded resize-none focus:outline-none focus:ring-1 focus:ring-[#1D4ED8]"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={editingFollowUpId ? () => handleUpdateFollowUp(editingFollowUpId, { scheduledAt: new Date(`${followUpDate}T${followUpTime}`).toISOString(), notes: followUpNotes }) : handleCreateFollowUp}
-                      disabled={followUpLoading || !followUpDate || !followUpTime}
-                      className="flex-1 text-[10px] font-semibold px-3 py-1.5 bg-[#1D4ED8] text-white rounded hover:bg-[#1E40AF] disabled:opacity-50 transition-colors"
-                    >
-                      {followUpLoading ? 'Saving...' : editingFollowUpId ? 'Update' : 'Save'}
-                    </button>
-                    <button
-                      onClick={resetFollowUpForm}
-                      className="text-[10px] font-semibold px-3 py-1.5 bg-[#F1F5F9] text-[#64748B] rounded hover:bg-[#E2E8F0] transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
+            {sortedCallHistory.length === 0 ? (
+              <div className="text-center py-8 px-3 rounded-xl border border-dashed border-[#E2E8F0] bg-[#F8FAFC]">
+                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center mx-auto mb-2 shadow-sm">
+                  <Phone size={16} className="text-[#94A3B8]" />
                 </div>
+                <p className="text-xs text-[#64748B]">No calls made yet</p>
+                <p className="text-[10px] text-[#94A3B8] mt-1">Click Start Call to begin</p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {sortedCallHistory.map((call, index) => {
+                  const isConnected = call.outcome === 'Connected'
+                  const isIncoming = call.direction === 'incoming'
+                  const duration = call.duration || 0
+                  const mins = Math.floor(duration / 60)
+                  const secs = duration % 60
+                  const durationText = duration > 0 ? `${mins}m ${secs.toString().padStart(2, '0')}s` : '—'
+                  const startedAt = new Date(call.startedAt || call.createdAt)
+                  const dotColor = isConnected ? '#16A34A' : isIncoming ? '#F59E0B' : '#DC2626'
+                  const outcomeLabel = call.outcome || call.status || 'Unknown'
+                  const outcomeStyle = isConnected
+                    ? { bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0' }
+                    : { bg: '#FEF2F2', text: '#B91C1C', border: '#FECACA' }
+
+                  return (
+                    <div
+                      key={call._id}
+                      className={`relative rounded-xl border p-3 transition-all hover:shadow-sm ${
+                        index === 0
+                          ? 'border-[#BFDBFE] bg-gradient-to-br from-[#EFF6FF] to-white'
+                          : 'border-[#E2E8F0] bg-white'
+                      }`}
+                    >
+                      {/* Top row: number + direction pill + outcome */}
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span
+                            className="w-1.5 h-1.5 rounded-full shrink-0"
+                            style={{ background: dotColor }}
+                          />
+                          <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wide">
+                            #{sortedCallHistory.length - index} · {isIncoming ? 'Incoming' : 'Outbound'}
+                          </span>
+                          {index === 0 && (
+                            <span className="text-[9px] font-bold text-[#1D4ED8] bg-[#DBEAFE] px-1.5 py-0.5 rounded">
+                              Latest
+                            </span>
+                          )}
+                        </div>
+                        <span
+                          className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border shrink-0"
+                          style={{
+                            background: outcomeStyle.bg,
+                            color: outcomeStyle.text,
+                            borderColor: outcomeStyle.border,
+                          }}
+                        >
+                          {outcomeLabel}
+                        </span>
+                      </div>
+
+                      {/* Date + time + duration */}
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <p className="text-xs font-bold text-[#0F172A]">
+                          {startedAt.toLocaleDateString('en-IN', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                          })}
+                        </p>
+                        <p className="text-[10px] text-[#64748B] tabular-nums">{durationText}</p>
+                      </div>
+                      <p className="text-[10px] text-[#64748B] mb-1">
+                        {startedAt.toLocaleTimeString('en-IN', {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true,
+                        })}
+                      </p>
+
+                      {/* Representative */}
+                      {call.representativeName && (
+                        <p className="text-[10px] text-[#475569] truncate">
+                          <span className="text-[#94A3B8]">By </span>
+                          <span className="font-semibold">{call.representativeName}</span>
+                        </p>
+                      )}
+
+                      {/* Inline recording player (only when available) */}
+                      {call.recordingUrl && (
+                        <audio
+                          src={call.recordingUrl}
+                          controls
+                          preload="none"
+                          className="w-full h-7 mt-2"
+                          style={{ outline: 'none' }}
+                        />
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
-
-            {/* Follow-up List */}
-            <div className="relative">
-              <div className="absolute left-3.5 top-0 bottom-0 w-px bg-[#E2E8F0]" />
-              <div className="space-y-4">
-                {followUps.length === 0 ? (
-                  <div className="text-center py-6">
-                    <Calendar size={20} className="text-[#94A3B8] mx-auto mb-2" />
-                    <p className="text-xs text-[#64748B]">No follow-ups scheduled</p>
-                  </div>
-                ) : (
-                  followUps.map((followUp) => {
-                    const isPending = followUp.status === 'pending'
-                    const isCompleted = followUp.status === 'completed'
-                    const scheduledDate = new Date(followUp.scheduledAt)
-                    const isPast = scheduledDate < new Date() && isPending
-
-                    return (
-                      <div key={followUp._id} className="flex gap-3 relative animate-fade-in">
-                        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 z-10 shadow-sm ${
-                          isCompleted ? 'bg-green-100 border-2 border-green-300' :
-                          isPast ? 'bg-red-100 border-2 border-red-300' :
-                          'bg-amber-100 border-2 border-amber-300'
-                        }`}>
-                          {isCompleted ? (
-                            <CheckCircle size={12} className="text-green-600" />
-                          ) : isPast ? (
-                            <AlertCircle size={12} className="text-red-600" />
-                          ) : (
-                            <Clock size={12} className="text-amber-600" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0 pb-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className={`text-xs font-semibold ${isPast ? 'text-red-600' : 'text-[#0F172A]'}`}>
-                              {scheduledDate.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            </p>
-                            <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${
-                              isCompleted ? 'bg-green-100 text-green-700' :
-                              isPast ? 'bg-red-100 text-red-700' :
-                              'bg-amber-100 text-amber-700'
-                            }`}>
-                              {followUp.status}
-                            </span>
-                          </div>
-                          <p className="text-[10px] text-[#475569] mt-0.5">
-                            {scheduledDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                          {followUp.notes && (
-                            <p className="text-[10px] text-[#64748B] mt-1.5 bg-[#F8FAFC] p-2 rounded">
-                              {followUp.notes}
-                            </p>
-                          )}
-                          {isLeadOwner && (
-                            <div className="flex items-center gap-2 mt-2">
-                              {isPending && (
-                                <button
-                                  onClick={() => handleUpdateFollowUp(followUp._id, { status: 'completed' })}
-                                  className="text-[9px] font-medium px-2 py-0.5 bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors"
-                                >
-                                  Mark Done
-                                </button>
-                              )}
-                              <button
-                                onClick={() => openEditFollowUp(followUp)}
-                                className="text-[9px] font-medium px-2 py-0.5 bg-[#F1F5F9] text-[#64748B] rounded hover:bg-[#E2E8F0] transition-colors"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => handleDeleteFollowUp(followUp._id)}
-                                className="text-[9px] font-medium px-2 py-0.5 bg-red-50 text-red-500 rounded hover:bg-red-100 transition-colors"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })
-                )}
-              </div>
-            </div>
           </div>
         </div>
       </div>
