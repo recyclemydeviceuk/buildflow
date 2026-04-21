@@ -2568,6 +2568,7 @@ export default function LeadDetail() {
                           src={callsAPI.getRecordingUrl(call._id)}
                           controls
                           preload="none"
+                          crossOrigin="anonymous"
                           className="w-full h-8 mt-2"
                           style={{ outline: 'none' }}
                         />
