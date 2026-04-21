@@ -2569,7 +2569,10 @@ export default function LeadDetail() {
                           controls
                           preload="none"
                           crossOrigin="anonymous"
-                          className="w-full h-8 mt-2"
+                          // h-10 = 40px — just enough for the browser's native
+                          // controls to show the scrub bar. At anything smaller
+                          // Chrome/Safari auto-hide the timeline to save space.
+                          className="w-full h-10 mt-2"
                           style={{ outline: 'none' }}
                         />
                       )}
