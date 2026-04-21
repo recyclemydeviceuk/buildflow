@@ -9,6 +9,7 @@ import { callsAPI, type Call } from '../api/calls'
 import { remindersAPI } from '../api/reminders'
 import { teamAPI } from '../api/team'
 import PostCallFeedbackModal from '../components/leads/PostCallFeedbackModal'
+import RecordingPlayer from '../components/calls/RecordingPlayer'
 import RepresentativePicker, { type RepresentativePickerOption } from '../components/leads/RepresentativePicker'
 import CreatedAtEditor, { formatDateTimeLocalInput } from '../components/leads/CreatedAtEditor'
 import CallReminderModal from '../components/reminders/CallReminderModal'
@@ -2564,17 +2565,17 @@ export default function LeadDetail() {
                           directly. Our backend route injects the Basic-auth
                           header and streams the bytes back. */}
                       {call.recordingUrl && featureControls.callRecording && (
-                        <audio
-                          src={callsAPI.getRecordingUrl(call._id)}
-                          controls
-                          preload="none"
-                          crossOrigin="anonymous"
-                          // h-10 = 40px — just enough for the browser's native
-                          // controls to show the scrub bar. At anything smaller
-                          // Chrome/Safari auto-hide the timeline to save space.
-                          className="w-full h-10 mt-2"
-                          style={{ outline: 'none' }}
-                        />
+                        <div className="mt-2.5">
+                          {/* Compact variant of the shared RecordingPlayer —
+                              same custom UI used in the Call Log detail view.
+                              Dodges the browser native-controls scrub-bar auto-
+                              hide problem in narrow containers. */}
+                          <RecordingPlayer
+                            call={call}
+                            featureRecording={featureControls.callRecording}
+                            variant="light"
+                          />
+                        </div>
                       )}
                     </div>
                   )

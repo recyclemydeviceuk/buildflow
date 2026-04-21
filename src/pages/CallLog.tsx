@@ -9,6 +9,7 @@ import {
   Check, ChevronUp,
 } from 'lucide-react'
 import { callsAPI, type Call, type CallFilters } from '../api/calls'
+import SharedRecordingPlayer from '../components/calls/RecordingPlayer'
 import { teamAPI } from '../api/team'
 import { useAuth } from '../context/AuthContext'
 import { useSocket } from '../context/SocketContext'
@@ -66,106 +67,10 @@ function fmtDateTime(value?: string | null) {
 }
 
 // ── Inline Recording Player ──────────────────────────────────────────────────
-
-function RecordingPlayer({ call, featureRecording }: { call: Call; featureRecording: boolean }) {
-  const audioRef = useRef<HTMLAudioElement>(null)
-  const [audioSrc, setAudioSrc] = useState<string | null>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [totalDuration, setTotalDuration] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
-
-  useEffect(() => {
-    setAudioSrc(null)
-    setIsPlaying(false)
-    setCurrentTime(0)
-    setTotalDuration(0)
-    if (!featureRecording || !call.recordingUrl) { setLoading(false); return }
-    let objUrl: string | null = null
-    setLoading(true)
-    setError(false)
-    fetch(callsAPI.getRecordingUrl(call._id))
-      .then(r => { if (!r.ok) throw new Error(); return r.blob() })
-      .then(blob => { objUrl = URL.createObjectURL(blob); setAudioSrc(objUrl) })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false))
-    return () => { if (objUrl) URL.revokeObjectURL(objUrl) }
-  }, [call._id, call.recordingUrl, featureRecording])
-
-  const toggle = () => {
-    if (!audioRef.current || !audioSrc) return
-    if (isPlaying) audioRef.current.pause(); else void audioRef.current.play()
-    setIsPlaying(p => !p)
-  }
-
-  const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0
-
-  if (!featureRecording || !call.recordingUrl) {
-    return (
-      <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-[#F1F5F9] border border-[#E2E8F0]">
-        <PhoneOff size={14} className="text-[#94A3B8]" />
-        <span className="text-xs text-[#94A3B8]">{!featureRecording ? 'Recordings disabled' : 'No recording available'}</span>
-      </div>
-    )
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
-        <Loader2 size={14} className="text-[#1D4ED8] animate-spin" />
-        <span className="text-xs text-[#64748B]">Loading recording...</span>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-[#FEF2F2] border border-[#FECACA]">
-        <PhoneOff size={14} className="text-[#DC2626]" />
-        <span className="text-xs text-[#DC2626]">Could not load recording</span>
-      </div>
-    )
-  }
-
-  return (
-    <div className="bg-[#0F172A] rounded-xl px-4 py-4">
-      <div className="flex items-center gap-3 mb-3">
-        <button
-          onClick={toggle}
-          className="w-9 h-9 rounded-full bg-[#1D4ED8] flex items-center justify-center text-white hover:bg-blue-600 shrink-0 transition-colors"
-        >
-          {isPlaying ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" className="ml-0.5" />}
-        </button>
-        <div className="flex-1">
-          <div className="flex justify-between text-[10px] font-mono text-[#64748B] mb-1.5">
-            <span>{fmtDuration(currentTime)}</span>
-            <span>{fmtDuration(totalDuration)}</span>
-          </div>
-          <div
-            className="relative h-1.5 bg-white/10 rounded-full cursor-pointer"
-            onClick={e => {
-              if (!audioRef.current) return
-              const rect = e.currentTarget.getBoundingClientRect()
-              audioRef.current.currentTime = ((e.clientX - rect.left) / rect.width) * totalDuration
-            }}
-          >
-            <div className="absolute left-0 top-0 h-full bg-[#3B82F6] rounded-full transition-all" style={{ width: `${progress}%` }} />
-          </div>
-        </div>
-      </div>
-      <audio
-        ref={audioRef}
-        src={audioSrc || ''}
-        preload="auto"
-        className="hidden"
-        onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
-        onLoadedMetadata={() => setTotalDuration(audioRef.current?.duration || 0)}
-        onEnded={() => setIsPlaying(false)}
-      />
-    </div>
-  )
-}
+// Thin alias around the shared component so the rest of the file doesn't care.
+const RecordingPlayer = ({ call, featureRecording }: { call: Call; featureRecording: boolean }) => (
+  <SharedRecordingPlayer call={call} featureRecording={featureRecording} variant="dark" />
+)
 
 // ── Call Detail Side Panel ────────────────────────────────────────────────────
 
