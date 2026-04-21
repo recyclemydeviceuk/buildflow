@@ -210,6 +210,24 @@ export const leadsAPI = {
     return response.data
   },
 
+  getFollowUpCounts: async (owner?: string): Promise<{
+    success: boolean
+    data: {
+      all: number
+      with: number
+      without: number
+      overdue: number
+      today: number
+      tomorrow: number
+      thisWeek: number
+    }
+  }> => {
+    const params: Record<string, string> = {}
+    if (owner && owner !== 'All') params.owner = owner
+    const response = await client.get('/leads/follow-up-counts', { params })
+    return response.data
+  },
+
   respondToAssignment: async (id: string, action: 'accept' | 'decline'): Promise<{ success: boolean; data: { leadId: string; action: string } }> => {
     const response = await client.patch(`/leads/${id}/assignment-response`, { action })
     return response.data

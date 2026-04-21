@@ -129,6 +129,17 @@ export default function LeadList() {
   // Terminal dispositions (Failed, Booking Done, Agreement Done) are never counted as
   // missing — they don't need ongoing follow-ups.
   const [filterFollowUp, setFilterFollowUp] = useState<string>('All')
+  // Per-bucket counts for the follow-up filter dropdown (shown as inline badges).
+  // Refreshed alongside the leads list so the numbers stay in sync with edits.
+  const [followUpCounts, setFollowUpCounts] = useState<{
+    all: number
+    with: number
+    without: number
+    overdue: number
+    today: number
+    tomorrow: number
+    thisWeek: number
+  } | null>(null)
   const [dateRange, setDateRange] = useState<DateRange>({
     from: persistedFilters.dateRange.from ? new Date(persistedFilters.dateRange.from) : null,
     to: persistedFilters.dateRange.to ? new Date(persistedFilters.dateRange.to) : null,
@@ -436,6 +447,20 @@ export default function LeadList() {
     }
   }, [paginationMode, fetchLeads, initInfiniteScroll])
 
+  // Keep the follow-up bucket counts in sync with any filter / search change
+  // that could alter which leads are visible. Scopes by the currently-selected
+  // Owner filter when set (so a manager drilling into one rep sees their
+  // counts only).
+  useEffect(() => {
+    const ownerScope = isManager && filterOwner !== 'All' ? filterOwner : undefined
+    leadsAPI
+      .getFollowUpCounts(ownerScope)
+      .then((res) => {
+        if (res.success) setFollowUpCounts(res.data)
+      })
+      .catch((err) => console.error('follow-up counts fetch failed', err))
+  }, [isManager, filterOwner, filterDisposition, filterSource, filterCity, filterFollowUp, search, dateRange])
+
   useEffect(() => {
     const container = scrollContainerRef.current
     if (!container || paginationMode !== 'off') return
@@ -719,11 +744,54 @@ export default function LeadList() {
     description: city === 'All' ? 'Show every city' : 'Filter leads by city',
   }))
 
+  // Helper: append count to the option label when we have counts loaded.
+  // We render them as "Today (12)" so the manager can see at a glance
+  // how many leads are in each bucket before clicking to filter.
+  const followUpLabel = (base: string, count: number | undefined) =>
+    typeof count === 'number' ? `${base} (${count})` : base
+
   const followUpOptions: FancyDropdownOption[] = [
-    { value: 'All', label: 'All Follow-ups', description: 'Show every lead' },
-    { value: 'with', label: 'Has Follow-up', description: 'Leads with a scheduled next follow-up', dotColor: '#16A34A' },
-    { value: 'without', label: 'Missing (NA)', description: 'Active leads with no follow-up date set', dotColor: '#DC2626' },
-    { value: 'overdue', label: 'Overdue', description: 'Follow-up date is in the past', dotColor: '#F59E0B' },
+    {
+      value: 'All',
+      label: followUpLabel('All Follow-ups', followUpCounts?.all),
+      description: 'Show every lead',
+    },
+    {
+      value: 'today',
+      label: followUpLabel('Today', followUpCounts?.today),
+      description: 'Follow-ups scheduled for today',
+      dotColor: '#2563EB',
+    },
+    {
+      value: 'tomorrow',
+      label: followUpLabel('Tomorrow', followUpCounts?.tomorrow),
+      description: 'Scheduled for tomorrow',
+      dotColor: '#7C3AED',
+    },
+    {
+      value: 'thisWeek',
+      label: followUpLabel('This Week', followUpCounts?.thisWeek),
+      description: 'Scheduled within the next 7 days',
+      dotColor: '#0EA5E9',
+    },
+    {
+      value: 'overdue',
+      label: followUpLabel('Overdue', followUpCounts?.overdue),
+      description: 'Follow-up date has already passed',
+      dotColor: '#F59E0B',
+    },
+    {
+      value: 'without',
+      label: followUpLabel('Missing (NA)', followUpCounts?.without),
+      description: 'Active leads with no follow-up date set',
+      dotColor: '#DC2626',
+    },
+    {
+      value: 'with',
+      label: followUpLabel('Has Follow-up', followUpCounts?.with),
+      description: 'Every lead with a scheduled follow-up',
+      dotColor: '#16A34A',
+    },
   ]
 
   const ownerOptions: FancyDropdownOption[] = owners.map((owner) => {
