@@ -2556,13 +2556,19 @@ export default function LeadDetail() {
                         </p>
                       )}
 
-                      {/* Inline recording player (only when available) */}
-                      {call.recordingUrl && (
+                      {/* Inline recording player (only when available).
+                          IMPORTANT: we proxy through our backend via
+                          callsAPI.getRecordingUrl() because the raw Exotel URL
+                          requires HTTP Basic auth and browsers pop a scary
+                          Sign-In dialog when the <audio> element hits it
+                          directly. Our backend route injects the Basic-auth
+                          header and streams the bytes back. */}
+                      {call.recordingUrl && featureControls.callRecording && (
                         <audio
-                          src={call.recordingUrl}
+                          src={callsAPI.getRecordingUrl(call._id)}
                           controls
                           preload="none"
-                          className="w-full h-7 mt-2"
+                          className="w-full h-8 mt-2"
                           style={{ outline: 'none' }}
                         />
                       )}
