@@ -2415,22 +2415,20 @@ export default function LeadDetail() {
                   </div>
                 </div>
 
-                {/* Audio player */}
+                {/* Audio player — shared custom control, dark variant so it
+                    visually anchors the 'Latest Recording' card as the hero
+                    element of the right panel. Same code the Call History
+                    cards below use (light variant), so both UIs stay in sync. */}
                 <div className="p-4 bg-white">
-                  <audio
-                    controls
-                    preload="metadata"
-                    src={callsAPI.getRecordingUrl(latestRecordingCall._id)}
-                    crossOrigin="anonymous"
-                    className="w-full h-10"
-                    style={{ 
-                      borderRadius: '8px',
-                    }}
+                  <RecordingPlayer
+                    call={latestRecordingCall}
+                    featureRecording={featureControls.callRecording}
+                    variant="dark"
                   />
                   <div className="mt-3 flex justify-end">
-                    <a 
-                      href={callsAPI.getRecordingUrl(latestRecordingCall._id)} 
-                      target="_blank" 
+                    <a
+                      href={callsAPI.getRecordingUrl(latestRecordingCall._id)}
+                      target="_blank"
                       rel="noopener noreferrer"
                       className="text-[11px] font-semibold text-[#1D4ED8] hover:text-white hover:bg-[#1D4ED8] flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:shadow-md transition-all"
                     >
