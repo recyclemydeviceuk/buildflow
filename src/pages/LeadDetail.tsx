@@ -1879,6 +1879,205 @@ export default function LeadDetail() {
             </div>
           </div>
 
+          {/* ── Follow-ups — re-added to the main content flow after the right panel
+              was repurposed for Call History. Compact list with add / edit / mark-done /
+              delete for every scheduled follow-up against this lead. ─────────────── */}
+          <div className="bg-white rounded-xl border border-[#E2E8F0] overflow-hidden mb-4">
+            <div className="px-4 py-3 bg-gradient-to-r from-[#EFF6FF] to-white border-b border-[#DBEAFE] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#1D4ED8] to-[#3B82F6] flex items-center justify-center shadow-sm">
+                  <Calendar size={14} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-[#0F172A]">Follow-ups</p>
+                  <p className="text-[10px] text-[#64748B]">
+                    {followUps.length === 0
+                      ? 'Schedule a callback or meeting'
+                      : `${followUps.length} scheduled${followUps.filter((f) => f.status === 'pending').length ? ` · ${followUps.filter((f) => f.status === 'pending').length} pending` : ''}`}
+                  </p>
+                </div>
+              </div>
+              {isLeadOwner && !showFollowUpForm && (
+                <button
+                  onClick={() => setShowFollowUpForm(true)}
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-[#1D4ED8] text-white text-[11px] font-bold hover:bg-blue-700 transition-colors shadow-sm"
+                >
+                  <span className="text-sm leading-none">+</span>
+                  Add Follow-up
+                </button>
+              )}
+            </div>
+
+            <div className="p-4">
+              {/* Inline form for add / edit */}
+              {showFollowUpForm && (
+                <div className="mb-4 p-4 bg-[#FAFCFF] border border-[#DBEAFE] rounded-xl">
+                  <p className="text-xs font-bold text-[#0F172A] mb-3">
+                    {editingFollowUpId ? 'Edit follow-up' : 'New follow-up'}
+                  </p>
+                  <div className="space-y-2.5">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-[#94A3B8] uppercase tracking-wide mb-1">Date</label>
+                        <input
+                          type="date"
+                          value={followUpDate}
+                          onChange={(e) => setFollowUpDate(e.target.value)}
+                          className="w-full text-xs px-3 py-2 border border-[#E2E8F0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/15 focus:border-[#1D4ED8]/50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-[#94A3B8] uppercase tracking-wide mb-1">Time</label>
+                        <input
+                          type="time"
+                          value={followUpTime}
+                          onChange={(e) => setFollowUpTime(e.target.value)}
+                          className="w-full text-xs px-3 py-2 border border-[#E2E8F0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/15 focus:border-[#1D4ED8]/50"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-[#94A3B8] uppercase tracking-wide mb-1">Notes</label>
+                      <textarea
+                        value={followUpNotes}
+                        onChange={(e) => setFollowUpNotes(e.target.value)}
+                        placeholder="What to discuss, reminders, context…"
+                        rows={2}
+                        className="w-full text-xs px-3 py-2 border border-[#E2E8F0] rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/15 focus:border-[#1D4ED8]/50"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        onClick={
+                          editingFollowUpId
+                            ? () =>
+                                handleUpdateFollowUp(editingFollowUpId, {
+                                  scheduledAt: new Date(`${followUpDate}T${followUpTime}`).toISOString(),
+                                  notes: followUpNotes,
+                                })
+                            : handleCreateFollowUp
+                        }
+                        disabled={followUpLoading || !followUpDate || !followUpTime}
+                        className="h-8 px-4 rounded-lg bg-[#1D4ED8] text-white text-[11px] font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {followUpLoading ? 'Saving…' : editingFollowUpId ? 'Update' : 'Save follow-up'}
+                      </button>
+                      <button
+                        onClick={resetFollowUpForm}
+                        className="h-8 px-3 rounded-lg border border-[#E2E8F0] bg-white text-[#475569] text-[11px] font-semibold hover:bg-[#F8FAFC] transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* List */}
+              {followUps.length === 0 && !showFollowUpForm ? (
+                <div className="text-center py-8 px-4 rounded-xl border border-dashed border-[#E2E8F0] bg-[#FAFCFF]">
+                  <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center mx-auto mb-2 shadow-sm border border-[#E2E8F0]">
+                    <Calendar size={16} className="text-[#94A3B8]" />
+                  </div>
+                  <p className="text-xs text-[#64748B]">No follow-ups scheduled yet</p>
+                  {isLeadOwner && (
+                    <p className="text-[10px] text-[#94A3B8] mt-1">Click "Add Follow-up" to plan the next touchpoint</p>
+                  )}
+                </div>
+              ) : followUps.length > 0 ? (
+                <div className="space-y-2">
+                  {[...followUps]
+                    .sort((a, b) => +new Date(a.scheduledAt) - +new Date(b.scheduledAt))
+                    .map((followUp) => {
+                      const isPending = followUp.status === 'pending'
+                      const isCompleted = followUp.status === 'completed'
+                      const scheduledDate = new Date(followUp.scheduledAt)
+                      const isPast = scheduledDate < new Date() && isPending
+                      const statusStyle = isCompleted
+                        ? { bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0', label: 'Completed', Icon: CheckCircle }
+                        : isPast
+                          ? { bg: '#FEF2F2', text: '#B91C1C', border: '#FECACA', label: 'Overdue', Icon: AlertCircle }
+                          : { bg: '#FFFBEB', text: '#B45309', border: '#FDE68A', label: 'Upcoming', Icon: Clock }
+                      const StatusIcon = statusStyle.Icon
+                      return (
+                        <div
+                          key={followUp._id}
+                          className="flex items-start gap-3 p-3 rounded-xl border border-[#E2E8F0] bg-white hover:bg-[#FAFCFF] transition-colors"
+                        >
+                          <div
+                            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                            style={{ background: statusStyle.bg, border: `1px solid ${statusStyle.border}` }}
+                          >
+                            <StatusIcon size={13} style={{ color: statusStyle.text }} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs font-bold text-[#0F172A]">
+                                  {scheduledDate.toLocaleDateString('en-IN', {
+                                    weekday: 'short',
+                                    day: 'numeric',
+                                    month: 'short',
+                                    year: 'numeric',
+                                  })}
+                                </p>
+                                <span className="text-[10px] text-[#64748B]">
+                                  {scheduledDate.toLocaleTimeString('en-IN', {
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                    hour12: true,
+                                  })}
+                                </span>
+                              </div>
+                              <span
+                                className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border"
+                                style={{
+                                  background: statusStyle.bg,
+                                  color: statusStyle.text,
+                                  borderColor: statusStyle.border,
+                                }}
+                              >
+                                {statusStyle.label}
+                              </span>
+                            </div>
+                            {followUp.notes && (
+                              <p className="text-[11px] text-[#475569] mt-1.5 leading-relaxed">
+                                {followUp.notes}
+                              </p>
+                            )}
+                            {isLeadOwner && (
+                              <div className="flex items-center gap-1.5 mt-2">
+                                {isPending && (
+                                  <button
+                                    onClick={() => handleUpdateFollowUp(followUp._id, { status: 'completed' })}
+                                    className="text-[10px] font-bold px-2 py-1 rounded-md bg-[#F0FDF4] border border-[#BBF7D0] text-[#15803D] hover:bg-[#DCFCE7] transition-colors"
+                                  >
+                                    Mark Done
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => openEditFollowUp(followUp)}
+                                  className="text-[10px] font-bold px-2 py-1 rounded-md border border-[#E2E8F0] bg-white text-[#475569] hover:bg-[#F8FAFC] transition-colors"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteFollowUp(followUp._id)}
+                                  className="text-[10px] font-bold px-2 py-1 rounded-md bg-[#FEF2F2] border border-[#FECACA] text-[#DC2626] hover:bg-[#FEE2E2] transition-colors"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
           {/* ── Website Form Submission & Attribution ────────────────────────────── */}
           {(() => {
             // Keys that live in the Attribution panel, not the Form Data panel
