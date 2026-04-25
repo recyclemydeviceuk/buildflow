@@ -4,6 +4,11 @@ import { User } from './auth'
 export interface TeamMember extends User {
   phone?: string
   isActive: boolean
+  // Manager-controlled switch for whether new leads should auto-route to this
+  // rep. The user keeps every other capability when blocked (existing leads,
+  // calls, follow-ups, etc.). Defaults to true on the server so legacy users
+  // are unaffected.
+  canReceiveLeads: boolean
   lastLoginAt?: string
   createdAt: string
   temporaryPassword?: string
@@ -16,6 +21,7 @@ const normalizeTeamMember = (raw: any): TeamMember => ({
   role: raw?.role,
   phone: raw?.phone || '',
   isActive: raw?.isActive ?? true,
+  canReceiveLeads: raw?.canReceiveLeads !== false,
   avatarUrl: raw?.avatarUrl || undefined,
   callAvailabilityStatus: raw?.callAvailabilityStatus || 'available',
   callDeviceMode: raw?.callDeviceMode || 'phone',

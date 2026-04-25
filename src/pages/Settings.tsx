@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import {
+  Ban,
   Bell,
   Camera,
   Check,
@@ -1993,6 +1994,43 @@ const reps = teamMembers.filter((member) => member.role === 'representative' && 
 
   const isAutoMode = routing.mode === 'auto'
 
+  // Per-rep "block from receiving leads" toggle. Reuses the same PATCH
+  // endpoint as the rest of the team editor so the change is broadcast over
+  // the user-availability socket channel — every connected client sees it
+  // immediately. Optimistically flips the row, rolls back on error.
+  const [leadReceivingPendingId, setLeadReceivingPendingId] = useState<string | null>(null)
+  const [leadReceivingError, setLeadReceivingError] = useState('')
+  const handleToggleCanReceiveLeads = async (memberId: string, nextValue: boolean) => {
+    setLeadReceivingError('')
+    setLeadReceivingPendingId(memberId)
+    const previous = teamMembers
+    setTeamMembers((current) =>
+      current.map((m) => (m.id === memberId ? { ...m, canReceiveLeads: nextValue } : m))
+    )
+    try {
+      const res = await teamAPI.updateTeamMember(memberId, { canReceiveLeads: nextValue })
+      if (res.success) {
+        setTeamMembers((current) =>
+          current.map((m) => (m.id === memberId ? { ...m, ...res.data } : m))
+        )
+      } else {
+        setTeamMembers(previous)
+        setLeadReceivingError('Could not update that representative right now.')
+      }
+    } catch (error: any) {
+      setTeamMembers(previous)
+      setLeadReceivingError(error?.response?.data?.message || 'Could not update that representative right now.')
+    } finally {
+      setLeadReceivingPendingId(null)
+    }
+  }
+
+  // All reps (active + inactive) who could potentially receive leads. We show
+  // inactive ones too so the manager has a single place to see the routing
+  // posture of every account, but they're rendered greyed out.
+  const allReps = teamMembers.filter((m) => m.role === 'representative')
+  const blockedReps = allReps.filter((m) => m.isActive && m.canReceiveLeads === false)
+
   const renderRoutingSection = () => (
     <SectionShell
       title="Lead Assignment"
@@ -2061,6 +2099,80 @@ const reps = teamMembers.filter((member) => member.role === 'representative' && 
           <p className="text-xs font-semibold text-[#DC2626] bg-[#FEF2F2] border border-[#FECACA] rounded-lg px-3 py-2">
             {routingError}
           </p>
+        )}
+      </div>
+
+      {/* ── Lead Receiving (blocks reps from auto-routing) ── */}
+      <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 space-y-4 mt-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-[#0F172A]">Lead Receiving</p>
+            <p className="text-xs text-[#64748B] mt-0.5">
+              Toggle off to stop auto-routing new leads to a rep. They keep all existing leads and stay active for calls and follow-ups.
+            </p>
+          </div>
+          {blockedReps.length > 0 ? (
+            <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#FEF2F2] border border-[#FECACA] text-[#B91C1C] text-[10px] font-bold">
+              <Ban size={11} /> {blockedReps.length} blocked
+            </span>
+          ) : null}
+        </div>
+
+        {leadReceivingError && (
+          <p className="text-xs font-semibold text-[#DC2626] bg-[#FEF2F2] border border-[#FECACA] rounded-lg px-3 py-2">
+            {leadReceivingError}
+          </p>
+        )}
+
+        {allReps.length === 0 ? (
+          <p className="text-xs text-[#94A3B8] italic px-1">No representatives yet. Add reps from the Team tab.</p>
+        ) : (
+          <div className="divide-y divide-[#F1F5F9] -mx-1">
+            {allReps.map((rep) => {
+              const receiving = rep.canReceiveLeads !== false
+              const inactive = !rep.isActive
+              const pending = leadReceivingPendingId === rep.id
+              return (
+                <div
+                  key={rep.id}
+                  className={`flex items-center justify-between gap-3 px-1 py-2.5 ${inactive ? 'opacity-60' : ''}`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold text-[#0F172A] truncate">{rep.name}</p>
+                      {inactive ? (
+                        <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[#F1F5F9] text-[#64748B] uppercase tracking-wide">
+                          Inactive
+                        </span>
+                      ) : !receiving ? (
+                        <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[#FEF2F2] text-[#B91C1C] border border-[#FECACA] uppercase tracking-wide">
+                          Blocked
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="text-[11px] text-[#94A3B8] truncate">{rep.email}</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={receiving}
+                    aria-label={receiving ? `Block ${rep.name} from receiving leads` : `Allow ${rep.name} to receive leads`}
+                    disabled={pending || inactive}
+                    onClick={() => handleToggleCanReceiveLeads(rep.id, !receiving)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                      receiving ? 'bg-[#16A34A]' : 'bg-[#CBD5E1]'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                        receiving ? 'translate-x-[22px]' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
         )}
       </div>
 
@@ -2155,17 +2267,24 @@ const reps = teamMembers.filter((member) => member.role === 'representative' && 
                       ) : (
                         reps.map((rep) => {
                           const selected = rule.userIds.includes(rep.id)
+                          const blocked = rep.canReceiveLeads === false
                           return (
                             <button
                               key={rep.id}
                               type="button"
                               onClick={() => toggleRepOnRule(index, rep.id)}
-                              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${
+                              title={blocked ? `${rep.name} is blocked from receiving leads — toggle them on in the Lead Receiving panel above to start auto-routing.` : undefined}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${
                                 selected
-                                  ? 'bg-[#16A34A] border-[#16A34A] text-white shadow-sm'
-                                  : 'bg-white border-[#E2E8F0] text-[#475569] hover:border-[#BBF7D0]'
+                                  ? blocked
+                                    ? 'bg-[#94A3B8] border-[#94A3B8] text-white shadow-sm line-through decoration-1'
+                                    : 'bg-[#16A34A] border-[#16A34A] text-white shadow-sm'
+                                  : blocked
+                                    ? 'bg-[#F8FAFC] border-[#FECACA] text-[#B91C1C]'
+                                    : 'bg-white border-[#E2E8F0] text-[#475569] hover:border-[#BBF7D0]'
                               }`}
                             >
+                              {blocked ? <Ban size={10} /> : null}
                               {rep.name}
                             </button>
                           )
