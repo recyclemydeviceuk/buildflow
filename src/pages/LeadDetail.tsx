@@ -13,6 +13,8 @@ import RecordingPlayer from '../components/calls/RecordingPlayer'
 import RepresentativePicker, { type RepresentativePickerOption } from '../components/leads/RepresentativePicker'
 import CreatedAtEditor, { formatDateTimeLocalInput } from '../components/leads/CreatedAtEditor'
 import CallReminderModal from '../components/reminders/CallReminderModal'
+import WhatsAppIcon from '../components/common/WhatsAppIcon'
+import { openWhatsAppChat, sanitizePhoneForWhatsApp } from '../utils/whatsapp'
 import { useAuth } from '../context/AuthContext'
 import { useSocket } from '../context/SocketContext'
 import { useFeatureControls } from '../context/FeatureControlsContext'
@@ -1078,7 +1080,7 @@ export default function LeadDetail() {
           <button onClick={() => navigate('/leads')} className="p-1 rounded-lg hover:bg-[#F1F5F9] text-[#475569] transition-colors">
             <ArrowLeft size={15} />
           </button>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2.5">
               <h1 className="text-sm font-bold text-[#0F172A]">{lead.name}</h1>
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#EFF6FF] text-[#1D4ED8]">{lead.source}</span>
@@ -1112,6 +1114,38 @@ export default function LeadDetail() {
             </div>
             <p className="text-xs text-[#94A3B8] mt-0.5">Lead ID: {lead._id} · Created {formatLeadCreatedAtLabel(lead.createdAt)}</p>
           </div>
+          {(() => {
+            const primary = lead.phone
+            const alternate = lead.alternatePhone
+            const canChatPrimary = Boolean(sanitizePhoneForWhatsApp(primary))
+            const canChatAlternate = Boolean(sanitizePhoneForWhatsApp(alternate))
+            if (!canChatPrimary && !canChatAlternate) return null
+            return (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => openWhatsAppChat(primary)}
+                  disabled={!canChatPrimary}
+                  title={canChatPrimary ? `Open WhatsApp chat with ${lead.name} (${primary})` : 'No valid primary number'}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#25D366] text-white text-xs font-bold hover:bg-[#1EBE57] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                >
+                  <WhatsAppIcon size={13} />
+                  WhatsApp
+                </button>
+                {canChatAlternate && (
+                  <button
+                    type="button"
+                    onClick={() => openWhatsAppChat(alternate)}
+                    title={`Open WhatsApp chat (alternate ${alternate})`}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#BBF7D0] bg-[#F0FDF4] text-[#15803D] text-xs font-bold hover:bg-[#DCFCE7] transition-colors"
+                  >
+                    <WhatsAppIcon size={13} />
+                    Alt
+                  </button>
+                )}
+              </div>
+            )
+          })()}
         </div>
       </div>
 
@@ -2365,7 +2399,7 @@ export default function LeadDetail() {
                       const statusStyle = isCompleted
                         ? { bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0', label: 'Completed', Icon: CheckCircle }
                         : isPast
-                          ? { bg: '#FEF2F2', text: '#B91C1C', border: '#FECACA', label: 'Overdue', Icon: AlertCircle }
+                          ? { bg: '#FEF2F2', text: '#B91C1C', border: '#FECACA', label: 'Ignored', Icon: AlertCircle }
                           : { bg: '#FFFBEB', text: '#B45309', border: '#FDE68A', label: 'Upcoming', Icon: Clock }
                       const StatusIcon = statusStyle.Icon
                       return (

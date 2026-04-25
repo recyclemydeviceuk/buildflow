@@ -315,7 +315,7 @@ export default function AgentDashboard() {
     { id: 'calls', label: `Make ${callsTarget} calls today`, current: callsToday, target: callsTarget, icon: Phone, color: '#2563EB', done: callsToday >= callsTarget, xp: 30 },
     { id: 'contact', label: 'Contact 80% of your leads', current: leadPct, target: 100, icon: UserCheck, color: '#0EA5E9', done: leadPct >= 80, xp: 25 },
     { id: 'qualify', label: 'Qualify 2 leads this week', current: Math.min(qualifiedThisWeek, 2), target: 2, icon: CheckCircle2, color: '#1D4ED8', done: qualifiedThisWeek >= 2, xp: 20 },
-    { id: 'reminders', label: 'Clear all overdue reminders', current: overdueReminders === 0 ? 1 : 0, target: 1, icon: Bell, color: overdueReminders > 0 ? '#60A5FA' : '#0EA5E9', done: overdueReminders === 0, xp: 15 },
+    { id: 'reminders', label: 'Clear all ignored reminders', current: overdueReminders === 0 ? 1 : 0, target: 1, icon: Bell, color: overdueReminders > 0 ? '#60A5FA' : '#0EA5E9', done: overdueReminders === 0, xp: 15 },
   ]
   const missionsCompleted = missions.filter(m => m.done).length
   const totalXP = missions.filter(m => m.done).reduce((a, m) => a + m.xp, 0)
@@ -325,7 +325,7 @@ export default function AgentDashboard() {
     { label: 'Calls Today', value: callsToday, sub: `Target: ${callsTarget}`, icon: Phone, grad: 'from-[#2563EB] to-[#60A5FA]', path: '/call-log' },
     { label: 'Connected', value: connectedCallsToday, sub: `${connectRate}% connect rate`, icon: PhoneCall, grad: 'from-[#0EA5E9] to-[#38BDF8]', path: '/call-log' },
     { label: 'Qualified', value: qualifiedThisWeek, sub: 'This week', icon: CheckCircle2, grad: 'from-[#0284C7] to-[#0EA5E9]', path: '/leads' },
-    { label: 'Overdue', value: overdueReminders, sub: dueSoonReminders > 0 ? `+${dueSoonReminders} due soon` : 'All clear!', icon: AlertTriangle, grad: 'from-[#1E40AF] to-[#60A5FA]', path: '/reminders' },
+    { label: 'Ignored', value: overdueReminders, sub: dueSoonReminders > 0 ? `+${dueSoonReminders} due soon` : 'All clear!', icon: AlertTriangle, grad: 'from-[#1E40AF] to-[#60A5FA]', path: '/reminders' },
   ]
 
   const performanceSeries = [
@@ -366,7 +366,7 @@ export default function AgentDashboard() {
             </h1>
             <p className="text-[10px] text-slate-500 mt-0.5">
               {overdueReminders > 0
-                ? `${overdueReminders} overdue reminder${overdueReminders > 1 ? 's' : ''} · ${callsToday}/${callsTarget} calls`
+                ? `${overdueReminders} ignored reminder${overdueReminders > 1 ? 's' : ''} · ${callsToday}/${callsTarget} calls`
                 : `${callsToday}/${callsTarget} calls done · Keep it up!`}
             </p>
           </div>

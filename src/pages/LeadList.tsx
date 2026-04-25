@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, MapPin, ChevronRight, ArrowUpDown, X, Plus, ChevronLeft, RefreshCw, Trash2, ToggleLeft, ToggleRight, Loader2, Download, User, ChevronDown, Clock, CalendarDays, Check } from 'lucide-react'
 import { leadsAPI, type Lead } from '../api/leads'
@@ -18,6 +18,8 @@ import LeadColumnManager, {
   type LeadColumnKey,
 } from '../components/leads/LeadColumnManager'
 import DateRangePicker, { type DateRange } from '../components/common/DateRangePicker'
+import WhatsAppIcon from '../components/common/WhatsAppIcon'
+import { openWhatsAppChat, sanitizePhoneForWhatsApp } from '../utils/whatsapp'
 import { useAuth } from '../context/AuthContext'
 import { useSocket } from '../context/SocketContext'
 import { LEAD_FIELDS_STORAGE_KEY, LEAD_FIELDS_UPDATED_EVENT } from '../utils/leadFields'
@@ -54,6 +56,35 @@ type PersistedLeadFilters = {
   search: string
   source: string
   dateRange: { from: string | null; to: string | null }
+}
+
+// Module-level snapshot — survives unmount when the user navigates into a lead
+// detail page so we can restore scroll position + already-loaded leads when
+// they come back. Cleared on hydrate so it doesn't leak into unrelated visits.
+type LeadListNavigationSnapshot = {
+  signature: string
+  paginationMode: 'on' | 'off'
+  paginatedLeads: Lead[]
+  pagination: { page: number; total: number; pages: number }
+  infiniteLeads: Lead[]
+  infinitePage: number
+  hasMore: boolean
+  innerScrollTop: number
+  mainScrollTop: number
+  windowScrollY: number
+}
+let leadListNavigationSnapshot: LeadListNavigationSnapshot | null = null
+
+// The actual scroll container can be either the inner table wrapper or the
+// outer <main> element from Layout.tsx (depending on viewport / sticky banner
+// state). Walk up from the inner ref to find the closest <main>.
+const findMainAncestor = (start: HTMLElement | null): HTMLElement | null => {
+  let current = start?.parentElement || null
+  while (current) {
+    if (current.tagName === 'MAIN') return current
+    current = current.parentElement
+  }
+  return null
 }
 
 const readPersistedLeadFilters = (): PersistedLeadFilters => {
@@ -115,8 +146,37 @@ export default function LeadList() {
   const canEditCreatedAt = user?.role === 'manager' || user?.role === 'representative'
   const [persistedFilters] = useState(readPersistedLeadFilters)
 
-  const [leads, setLeads] = useState<Lead[]>([])
-  const [loading, setLoading] = useState(true)
+  // Consume the navigation snapshot exactly once on mount. We compute the
+  // filter signature from the persisted filters (the same source the filter
+  // state below initializes from) so we can validate the snapshot synchronously
+  // and use it as the seed for `useState` lazy initializers — that way the
+  // FIRST render already contains the saved leads, and useLayoutEffect can
+  // restore scroll position before the browser paints. This is the only way
+  // to avoid a "flash of top of list" on return.
+  const [navSnapshot] = useState<LeadListNavigationSnapshot | null>(() => {
+    const snap = leadListNavigationSnapshot
+    leadListNavigationSnapshot = null
+    if (!snap) return null
+    const expected = JSON.stringify({
+      search: persistedFilters.search.trim(),
+      filterDisposition: persistedFilters.disposition,
+      filterSource: persistedFilters.source,
+      filterCity: persistedFilters.city,
+      filterOwner: persistedFilters.owner,
+      filterFollowUp: 'All',
+      showMyLeadsOnly: false,
+      paginationMode: persistedFilters.paginationMode,
+      dateFrom: persistedFilters.dateRange.from,
+      dateTo: persistedFilters.dateRange.to,
+      dateMode: 'updatedAt',
+    })
+    return snap.signature === expected ? snap : null
+  })
+
+  const [leads, setLeads] = useState<Lead[]>(() =>
+    navSnapshot && navSnapshot.paginationMode === 'on' ? navSnapshot.paginatedLeads : []
+  )
+  const [loading, setLoading] = useState(() => !navSnapshot)
   const [ownershipToast, setOwnershipToast] = useState(false)
 
   const [search, setSearch] = useState(persistedFilters.search)
@@ -161,16 +221,29 @@ export default function LeadList() {
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [bulkUpdating, setBulkUpdating] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const [pagination, setPagination] = useState({ page: 1, total: 0, pages: 1 })
+  const [pagination, setPagination] = useState(() =>
+    navSnapshot ? navSnapshot.pagination : { page: 1, total: 0, pages: 1 }
+  )
   const [paginationMode, setPaginationMode] = useState<'on' | 'off'>(persistedFilters.paginationMode)
-  const [infiniteLeads, setInfiniteLeads] = useState<Lead[]>([])
-  const [infinitePage, setInfinitePage] = useState(1)
-  const [hasMore, setHasMore] = useState(true)
+  const [infiniteLeads, setInfiniteLeads] = useState<Lead[]>(() =>
+    navSnapshot && navSnapshot.paginationMode === 'off' ? navSnapshot.infiniteLeads : []
+  )
+  const [infinitePage, setInfinitePage] = useState(() => (navSnapshot ? navSnapshot.infinitePage : 1))
+  const [hasMore, setHasMore] = useState(() => (navSnapshot ? navSnapshot.hasMore : true))
   const [loadingMore, setLoadingMore] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const leadListRequestVersionRef = useRef(0)
   const featureControls = useFeatureControls()
   const [showMyLeadsOnly, setShowMyLeadsOnly] = useState(false)
+  // When true on next render, the auto-fetch effect skips one cycle so the
+  // restored leads aren't blown away by a fresh page-1 fetch. Set synchronously
+  // when navSnapshot is present so the very first auto-fetch run on mount sees
+  // the flag.
+  const skipNextAutoFetchRef = useRef(navSnapshot != null)
+  // Set true once the layout-effect has restored scroll. Prevents subsequent
+  // re-renders (e.g. socket-driven refreshes) from re-applying the stale
+  // snapshot scroll target.
+  const scrollRestoredRef = useRef(false)
 
   // Per-user column ordering + visibility, persisted to localStorage so it
   // survives reloads and navigations.
@@ -306,9 +379,98 @@ export default function LeadList() {
         params.dateTo = toDate.toISOString()
       }
 
+      // Tell the backend which timestamp the date range applies to. The UI
+      // toggle (Last Edit vs Created At) shifts the column shown AND the
+      // filter field — without this the backend always filters by createdAt
+      // even when the user expects "edited within range".
+      if (dateRange.from || dateRange.to) {
+        params.dateField = dateMode
+      }
+
       return params
     },
-    [search, filterDisposition, filterSource, filterCity, isManager, filterOwner, filterFollowUp, dateRange, showMyLeadsOnly, user?.id]
+    [search, filterDisposition, filterSource, filterCity, isManager, filterOwner, filterFollowUp, dateRange, dateMode, showMyLeadsOnly, user?.id]
+  )
+
+  // Stable string identity for the current filter set. Used to validate the
+  // navigation snapshot so we never restore stale leads when filters changed
+  // between leaving and returning to the page.
+  const filtersSignature = useMemo(
+    () =>
+      JSON.stringify({
+        search: search.trim(),
+        filterDisposition,
+        filterSource,
+        filterCity,
+        filterOwner,
+        filterFollowUp,
+        showMyLeadsOnly,
+        paginationMode,
+        dateFrom: dateRange.from ? dateRange.from.toISOString() : null,
+        dateTo: dateRange.to ? dateRange.to.toISOString() : null,
+        dateMode,
+      }),
+    [search, filterDisposition, filterSource, filterCity, filterOwner, filterFollowUp, showMyLeadsOnly, paginationMode, dateRange, dateMode]
+  )
+
+  // Restore scroll position on the very first commit, before paint. Because
+  // leads are seeded into state via lazy initializers above, the first render
+  // already contains the table rows — so the scroll container has its full
+  // scrollHeight by the time this layout-effect fires. We set scrollTop on
+  // every plausible candidate (inner table div, <main>, window) so whichever
+  // element is actually scrolling lands at the right spot. Non-scrolling
+  // elements clamp to 0 and are no-ops.
+  useLayoutEffect(() => {
+    if (scrollRestoredRef.current) return
+    if (!navSnapshot) return
+    const container = scrollContainerRef.current
+    if (!container) return
+    const visibleCount = navSnapshot.paginationMode === 'on'
+      ? navSnapshot.paginatedLeads.length
+      : navSnapshot.infiniteLeads.length
+    if (visibleCount === 0) {
+      scrollRestoredRef.current = true
+      return
+    }
+    const mainEl = findMainAncestor(container)
+    const apply = () => {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = navSnapshot.innerScrollTop
+      }
+      if (mainEl) mainEl.scrollTop = navSnapshot.mainScrollTop
+      if (navSnapshot.windowScrollY > 0) window.scrollTo(0, navSnapshot.windowScrollY)
+    }
+    apply()
+    // Reapply across the next two frames in case any late layout pass (web
+    // fonts loading, image dimensions resolving, etc.) shifts content height.
+    requestAnimationFrame(apply)
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      apply()
+      scrollRestoredRef.current = true
+    }))
+  }, [navSnapshot])
+
+  // Wrap navigation into a lead detail so we always capture the snapshot
+  // (scroll position + already-loaded leads) before unmounting.
+  const navigateToLead = useCallback(
+    (leadId: string) => {
+      const inner = scrollContainerRef.current
+      const mainEl = findMainAncestor(inner)
+      leadListNavigationSnapshot = {
+        signature: filtersSignature,
+        paginationMode,
+        paginatedLeads: leads,
+        pagination,
+        infiniteLeads,
+        infinitePage,
+        hasMore,
+        innerScrollTop: inner?.scrollTop ?? 0,
+        mainScrollTop: mainEl?.scrollTop ?? 0,
+        windowScrollY: typeof window !== 'undefined' ? window.scrollY : 0,
+      }
+      navigate(`/leads/${leadId}`)
+    },
+    [filtersSignature, paginationMode, leads, pagination, infiniteLeads, infinitePage, hasMore, navigate]
   )
 
   const fetchLeads = useCallback(
@@ -440,6 +602,10 @@ export default function LeadList() {
   }, [paginationMode, loadMoreLeads])
 
   useEffect(() => {
+    if (skipNextAutoFetchRef.current) {
+      skipNextAutoFetchRef.current = false
+      return
+    }
     if (paginationMode === 'on') {
       void fetchLeads(1)
     } else {
@@ -776,7 +942,7 @@ export default function LeadList() {
     },
     {
       value: 'overdue',
-      label: followUpLabel('Overdue', followUpCounts?.overdue),
+      label: followUpLabel('Ignored', followUpCounts?.overdue),
       description: 'Follow-up date has already passed',
       dotColor: '#F59E0B',
     },
@@ -1022,7 +1188,7 @@ export default function LeadList() {
                   </span>
                   <span className="text-[9px] text-[#94A3B8] whitespace-nowrap">
                     {d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
-                    {isOverdue && <span className="ml-1.5 font-bold text-[#DC2626]">Overdue</span>}
+                    {isOverdue && <span className="ml-1.5 font-bold text-[#DC2626]">Ignored</span>}
                   </span>
                 </div>
               )
@@ -1105,25 +1271,36 @@ export default function LeadList() {
       case 'actions':
         return (
           <td key={key} className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
-            {isManager ? (
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => void handleDeleteLead(lead)}
-                disabled={deletingLeadId === lead._id}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] text-[10px] font-bold hover:bg-[#FEE2E2] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                onClick={() => openWhatsAppChat(lead.phone)}
+                disabled={!sanitizePhoneForWhatsApp(lead.phone)}
+                title={`Open WhatsApp chat with ${lead.name}`}
+                className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-[#BBF7D0] bg-[#F0FDF4] text-[#15803D] hover:bg-[#DCFCE7] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                <Trash2 size={11} />
-                {deletingLeadId === lead._id ? '…' : 'Delete'}
+                <WhatsAppIcon size={12} />
               </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => navigate(`/leads/${lead._id}`)}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8] text-[10px] font-bold hover:bg-[#DBEAFE] transition-colors"
-              >
-                View
-              </button>
-            )}
+              {isManager ? (
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteLead(lead)}
+                  disabled={deletingLeadId === lead._id}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#FECACA] bg-[#FEF2F2] text-[#B91C1C] text-[10px] font-bold hover:bg-[#FEE2E2] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <Trash2 size={11} />
+                  {deletingLeadId === lead._id ? '…' : 'Delete'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => navigateToLead(lead._id)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] text-[#1D4ED8] text-[10px] font-bold hover:bg-[#DBEAFE] transition-colors"
+                >
+                  View
+                </button>
+              )}
+            </div>
           </td>
         )
       default:
@@ -1400,7 +1577,7 @@ export default function LeadList() {
                     <tr
                       key={lead._id}
                       className="border-b border-[#F1F5F9] hover:bg-[#F8FAFC] cursor-pointer transition-colors"
-                      onClick={() => navigate(`/leads/${lead._id}`)}
+                      onClick={() => navigateToLead(lead._id)}
                     >
                       <td className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
                         <label className="relative inline-flex items-center justify-center cursor-pointer select-none align-middle">

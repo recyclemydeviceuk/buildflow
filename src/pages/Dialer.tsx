@@ -21,6 +21,8 @@ import { remindersAPI } from '../api/reminders'
 import { settingsAPI } from '../api/settings'
 import { teamAPI, type TeamMember } from '../api/team'
 import CallReminderModal from '../components/reminders/CallReminderModal'
+import WhatsAppIcon from '../components/common/WhatsAppIcon'
+import { openWhatsAppChat, sanitizePhoneForWhatsApp } from '../utils/whatsapp'
 import { useAuth } from '../context/AuthContext'
 import { useSocket } from '../context/SocketContext'
 import {
@@ -689,15 +691,37 @@ export default function Dialer() {
                           <Phone size={13} />
                           Call Primary
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => openWhatsAppChat(selectedLead.phone)}
+                          disabled={!sanitizePhoneForWhatsApp(selectedLead.phone)}
+                          title={`Open WhatsApp chat with ${selectedLead.name}`}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#25D366] text-white text-xs font-bold rounded-lg hover:bg-[#1EBE57] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <WhatsAppIcon size={13} />
+                          WhatsApp
+                        </button>
                         {selectedLead.alternatePhone && (
-                          <button
-                            onClick={() => startLeadCall(true)}
-                            disabled={!canPlaceCall || !selectedLead}
-                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#0F172A] text-white text-xs font-bold rounded-lg hover:bg-[#1E293B] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <Phone size={13} />
-                            Call Alternate
-                          </button>
+                          <>
+                            <button
+                              onClick={() => startLeadCall(true)}
+                              disabled={!canPlaceCall || !selectedLead}
+                              className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#0F172A] text-white text-xs font-bold rounded-lg hover:bg-[#1E293B] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <Phone size={13} />
+                              Call Alternate
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openWhatsAppChat(selectedLead.alternatePhone)}
+                              disabled={!sanitizePhoneForWhatsApp(selectedLead.alternatePhone)}
+                              title="Open WhatsApp chat (alternate number)"
+                              className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#128C7E] text-white text-xs font-bold rounded-lg hover:bg-[#0E6F64] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <WhatsAppIcon size={13} />
+                              WhatsApp Alt
+                            </button>
+                          </>
                         )}
                       </div>
                       <button

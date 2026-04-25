@@ -336,7 +336,7 @@ export default function Dashboard() {
     { label: 'Deals Won', value: kpis?.wonLeads ?? 0, sub: `${kpis?.failedLeads ?? 0} failed`, delta: null, icon: Trophy, grad: 'from-[#0EA5E9] to-[#38BDF8]', path: '/leads' },
     { label: 'Calls Today', value: kpis?.callsToday ?? 0, sub: `${kpis?.connectedToday ?? 0} conn · ${kpis?.todayConnectRate ?? 0}%`, delta: null, icon: PhoneCall, grad: 'from-[#1E40AF] to-[#3B82F6]', path: '/call-log' },
     { label: 'Total Calls', value: kpis?.totalCalls ?? 0, sub: `${kpis?.callConnectRate ?? 0}% connect rate`, delta: null, icon: Phone, grad: 'from-[#0EA5E9] to-[#60A5FA]', path: '/call-log' },
-    { label: 'Overdue', value: kpis?.overdueRemindersTotal ?? 0, sub: 'Need attention', delta: null, icon: AlertTriangle, grad: 'from-[#2563EB] to-[#93C5FD]', path: '/reminders' },
+    { label: 'Ignored', value: kpis?.overdueRemindersTotal ?? 0, sub: 'Need attention', delta: null, icon: AlertTriangle, grad: 'from-[#2563EB] to-[#93C5FD]', path: '/reminders' },
     { label: 'Active Reps', value: kpis?.totalReps ?? 0, sub: 'On the team', delta: null, icon: UserCheck, grad: 'from-[#1D4ED8] to-[#60A5FA]', path: '/performance' },
     { label: 'New This Month', value: kpis?.newLeadsThisMonth ?? 0, sub: `${(kpis?.monthGrowth ?? 0) >= 0 ? '+' : ''}${kpis?.monthGrowth ?? 0}% vs last mo`, delta: kpis?.monthGrowth ?? null, icon: Flame, grad: 'from-[#0284C7] to-[#38BDF8]', path: '/leads' },
   ]
@@ -348,7 +348,7 @@ export default function Dashboard() {
     { label: 'Leads Contacted', value: repLeaderboard.reduce((a, r) => a + r.leadsContacted, 0), color: '#38BDF8', icon: UserCheck },
     { label: 'Qualified/Wk', value: repLeaderboard.reduce((a, r) => a + r.qualifiedThisWeek, 0), color: '#0284C7', icon: CheckCircle2 },
     { label: 'Won Total', value: repLeaderboard.reduce((a, r) => a + r.wonLeads, 0), color: '#0369A1', icon: Trophy },
-    { label: 'Overdue', value: repLeaderboard.reduce((a, r) => a + r.overdueReminders, 0), color: '#60A5FA', icon: AlertTriangle },
+    { label: 'Ignored', value: repLeaderboard.reduce((a, r) => a + r.overdueReminders, 0), color: '#60A5FA', icon: AlertTriangle },
     { label: 'Avg Score', value: repLeaderboard.length > 0 ? Math.round(repLeaderboard.reduce((a, r) => a + r.score, 0) / repLeaderboard.length) : 0, color: '#93C5FD', icon: Star },
   ]
 

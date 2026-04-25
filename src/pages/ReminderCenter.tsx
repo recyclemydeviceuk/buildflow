@@ -8,7 +8,7 @@ type TabKey = UIReminderStatus | 'all'
 const REMINDERS_PAGE_SIZE = 40
 
 const statusCfg: Record<string, { label: string; dot: string; text: string; bar: string }> = {
-  overdue:   { label: 'Overdue',   dot: '#DC2626', text: '#DC2626', bar: '#DC2626' },
+  overdue:   { label: 'Ignored',   dot: '#DC2626', text: '#DC2626', bar: '#DC2626' },
   'due-soon':{ label: 'Due Soon',  dot: '#F59E0B', text: '#D97706', bar: '#F59E0B' },
   upcoming:  { label: 'Upcoming',  dot: '#16A34A', text: '#16A34A', bar: '#16A34A' },
   completed: { label: 'Completed', dot: '#94A3B8', text: '#94A3B8', bar: '#CBD5E1' },
@@ -130,7 +130,7 @@ export default function ReminderCenter() {
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'all', label: 'All' },
-    { key: 'overdue', label: 'Overdue' },
+    { key: 'overdue', label: 'Ignored' },
     { key: 'due-soon', label: 'Due Soon' },
     { key: 'upcoming', label: 'Upcoming' },
     { key: 'completed', label: 'Done' },
@@ -156,7 +156,7 @@ export default function ReminderCenter() {
     },
     {
       key: 'overdue',
-      label: 'Overdue',
+      label: 'Ignored',
       helper: 'Immediate attention',
       Icon: AlertTriangle,
       surface: 'bg-[#FEE2E2]',
@@ -220,7 +220,7 @@ export default function ReminderCenter() {
                 <span className={`w-1.5 h-1.5 rounded-full ${counts.overdue > 0 ? 'bg-[#FCA5A5] animate-pulse' : 'bg-[#86EFAC]'}`} />
                 <span className="text-xs font-semibold text-white/90">
                   {counts.overdue > 0
-                    ? `${counts.overdue} overdue · ${counts['due-soon']} due soon`
+                    ? `${counts.overdue} ignored · ${counts['due-soon']} due soon`
                     : counts['due-soon'] > 0
                     ? `${counts['due-soon']} due soon`
                     : 'All on schedule'}

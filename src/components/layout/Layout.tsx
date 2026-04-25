@@ -380,7 +380,7 @@ export default function Layout() {
                 <p className="text-sm font-bold text-[#0F172A]">Follow-up Due In 30 Minutes</p>
               </div>
               <p className="text-xs text-[#64748B] mt-1">
-                Confirm this follow-up now, or skip it for five minutes. If it is still pending after the scheduled time, it will stay in overdue follow-ups until completed.
+                Confirm this follow-up now, or skip it for five minutes. If it is still pending after the scheduled time, it will stay in ignored follow-ups until completed.
               </p>
             </div>
 

@@ -1353,7 +1353,7 @@ export default function Settings({ role }: { role?: string }) {
 
       <div className="bg-white rounded-2xl border border-[#E2E8F0] divide-y divide-[#F1F5F9]">
         {renderNotificationToggle('newLeadAlerts', 'New Lead Alerts', 'Email managers and the assigned owner when a fresh lead enters BuildFlow.')}
-        {renderNotificationToggle('reminderAlerts', 'Reminder Alerts', 'Get email reminders when a follow-up becomes due soon or overdue.')}
+        {renderNotificationToggle('reminderAlerts', 'Reminder Alerts', 'Get email reminders when a follow-up becomes due soon or ignored.')}
         {renderNotificationToggle('missedCallAlerts', 'Missed Call Alerts', 'Get notified when a call ends as missed, busy, or unanswered.')}
         {renderNotificationToggle('assignmentAlerts', 'Assignment Alerts', 'Notify representatives when a lead is assigned or transferred to them.')}
         {renderNotificationToggle('dailyDigest', 'Daily Digest', 'Receive a daily BuildFlow performance summary by email.')}

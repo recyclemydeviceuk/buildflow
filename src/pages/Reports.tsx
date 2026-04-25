@@ -6,7 +6,7 @@ const reportTypes = [
   { id: 'leads', label: 'Lead Pipeline', icon: TrendingUp, desc: 'Full breakdown of leads by source, disposition, and owner' },
   { id: 'calls', label: 'Call Activity', icon: BarChart3, desc: 'Call volume, duration, and outcome trends over time' },
   { id: 'conversion', label: 'Conversion Funnel', icon: PieChart, desc: 'Stage-by-stage funnel from New to Won' },
-  { id: 'rep', label: 'Rep Performance', icon: FileText, desc: 'Individual rep metrics, scores, and overdue rates' },
+  { id: 'rep', label: 'Rep Performance', icon: FileText, desc: 'Individual rep metrics, scores, and ignored rates' },
 ]
 
 const months = ['Jan', 'Feb', 'Mar']

@@ -9,7 +9,7 @@ type FollowUpBucket = 'all' | 'overdue' | 'due-soon' | 'upcoming' | 'completed' 
 const FOLLOW_UPS_PAGE_SIZE = 40
 
 const bucketConfig: Record<Exclude<FollowUpBucket, 'all'>, { label: string; dot: string; bg: string; text: string }> = {
-  overdue: { label: 'Overdue', dot: '#DC2626', bg: '#FEF2F2', text: '#B91C1C' },
+  overdue: { label: 'Ignored', dot: '#DC2626', bg: '#FEF2F2', text: '#B91C1C' },
   'due-soon': { label: 'Due Soon', dot: '#F59E0B', bg: '#FFFBEB', text: '#B45309' },
   upcoming: { label: 'Upcoming', dot: '#16A34A', bg: '#F0FDF4', text: '#15803D' },
   completed: { label: 'Completed', dot: '#2563EB', bg: '#EFF6FF', text: '#1D4ED8' },
@@ -235,7 +235,7 @@ export default function FollowUps() {
 
   const tabs: Array<{ key: FollowUpBucket; label: string }> = [
     { key: 'all', label: 'All' },
-    { key: 'overdue', label: 'Overdue' },
+    { key: 'overdue', label: 'Ignored' },
     { key: 'due-soon', label: 'Due Soon' },
     { key: 'upcoming', label: 'Upcoming' },
     { key: 'completed', label: 'Completed' },
@@ -262,7 +262,7 @@ export default function FollowUps() {
     },
     {
       key: 'overdue',
-      label: 'Overdue',
+      label: 'Ignored',
       helper: 'Needs immediate action',
       Icon: Clock3,
       surface: 'bg-[#FEF2F2]',
