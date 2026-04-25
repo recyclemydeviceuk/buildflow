@@ -117,9 +117,6 @@ export default function IntegrationsConnected() {
         <div className="flex items-center justify-between max-w-6xl mx-auto">
           <div>
             <h1 className="text-lg font-extrabold text-[#0F172A] tracking-tight">Integrations</h1>
-            <p className="text-xs text-[#64748B] mt-0.5">
-              {workingCount} of {cards.length} working
-            </p>
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#F0FDF4] border border-[#BBF7D0]">
             <CheckCircle2 size={14} className="text-[#16A34A]" />

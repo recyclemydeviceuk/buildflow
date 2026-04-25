@@ -919,7 +919,7 @@ export default function LeadList() {
   const followUpOptions: FancyDropdownOption[] = [
     {
       value: 'All',
-      label: followUpLabel('All Follow-ups', followUpCounts?.all),
+      label: followUpLabel('All Follow-ups', followUpCounts?.with),
       description: 'Show every lead',
     },
     {
