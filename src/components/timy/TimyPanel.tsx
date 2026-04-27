@@ -2,17 +2,49 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   X, Mic, MicOff, Phone, PhoneOff, Send,
   Loader2, AlertCircle, ShieldCheck, Volume2, MessageSquare, Languages,
+  ChevronDown, Check,
 } from 'lucide-react'
 import { useTimySession, type TimyLanguage } from './useTimySession'
 
 const LANG_STORAGE_KEY = 'timy:language'
 
 const isLanguage = (v: string | null): v is TimyLanguage =>
-  v === 'en-IN' || v === 'hi-IN'
+  v === 'en-IN' || v === 'hi-IN' || v === 'kn-IN'
 
-const LANG_OPTIONS: { value: TimyLanguage; label: string; native: string }[] = [
-  { value: 'en-IN', label: 'English', native: 'English (IN)' },
-  { value: 'hi-IN', label: 'हिन्दी',   native: 'हिन्दी' },
+interface LangOption {
+  value: TimyLanguage
+  /** Short label shown on the trigger pill */
+  short: string
+  /** Native script name shown in the dropdown */
+  native: string
+  /** English description shown beneath the native name */
+  description: string
+  /** Voice metadata shown as a small caption */
+  voice: string
+}
+
+const LANG_OPTIONS: LangOption[] = [
+  {
+    value: 'en-IN',
+    short: 'English',
+    native: 'English',
+    description: 'Indian English',
+    voice: 'Female · Aoede',
+  },
+  {
+    value: 'hi-IN',
+    short: 'हिन्दी',
+    native: 'हिन्दी',
+    description: 'Hindi',
+    voice: 'Male · Charon',
+  },
+  {
+    value: 'kn-IN',
+    short: 'ಕನ್ನಡ',
+    native: 'ಕನ್ನಡ',
+    description: 'Kannada',
+    voice: 'Female · Kore',
+  },
 ]
 
 interface Props {
@@ -90,6 +122,8 @@ function TimyMark({ size = 36, animate = false }: { size?: number; animate?: boo
 export default function TimyPanel({ onClose }: Props) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [textDraft, setTextDraft] = useState('')
+  const [langMenuOpen, setLangMenuOpen] = useState(false)
+  const langMenuRef = useRef<HTMLDivElement>(null)
   const [language, setLanguage] = useState<TimyLanguage>(() => {
     try {
       const saved = localStorage.getItem(LANG_STORAGE_KEY)
@@ -141,6 +175,26 @@ export default function TimyPanel({ onClose }: Props) {
   // Keep the ref pointing at the latest handler so the model-triggered path
   // always sees the freshest closure.
   handleLanguageChangeRef.current = handleLanguageChange
+
+  // Close the language dropdown on outside-click / Esc
+  useEffect(() => {
+    if (!langMenuOpen) return
+    const onPointer = (e: MouseEvent) => {
+      if (!langMenuRef.current) return
+      if (!langMenuRef.current.contains(e.target as Node)) setLangMenuOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLangMenuOpen(false)
+    }
+    window.addEventListener('mousedown', onPointer)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onPointer)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [langMenuOpen])
+
+  const currentLang = LANG_OPTIONS.find((o) => o.value === language) || LANG_OPTIONS[0]
 
   useEffect(() => {
     const el = transcriptRef.current
@@ -224,35 +278,101 @@ export default function TimyPanel({ onClose }: Props) {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Language toggle */}
-          <div
-            className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-[#F8FAFC] border border-[#E2E8F0]"
-            role="group"
-            aria-label="Voice language"
-          >
-            <Languages size={12} className="text-[#94A3B8] ml-1.5 mr-0.5" />
-            {LANG_OPTIONS.map((opt) => {
-              const active = language === opt.value
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => handleLanguageChange(opt.value)}
-                  title={`Talk to Timy in ${opt.native}`}
-                  aria-pressed={active}
-                  className={`
-                    px-2.5 py-1 rounded-full text-[11px] font-extrabold tracking-tight transition-all
-                    ${
-                      active
-                        ? 'bg-white text-[#1D4ED8] shadow-[0_2px_6px_-1px_rgba(15,23,42,0.10)] border border-[#DBEAFE]'
-                        : 'text-[#64748B] hover:text-[#0F172A]'
-                    }
-                  `}
-                >
-                  {opt.label}
-                </button>
-              )
-            })}
+          {/* Language dropdown */}
+          <div ref={langMenuRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setLangMenuOpen((v) => !v)}
+              aria-haspopup="listbox"
+              aria-expanded={langMenuOpen}
+              title="Voice language"
+              className="
+                inline-flex items-center gap-1.5 pl-2.5 pr-2 py-1.5 rounded-full
+                bg-white border border-[#E2E8F0]
+                text-[11px] font-extrabold text-[#0F172A] tracking-tight
+                shadow-sm hover:bg-[#F8FAFC] hover:border-[#CBD5E1]
+                transition-colors
+              "
+            >
+              <Languages size={12} className="text-[#8B5CF6]" />
+              <span>{currentLang.short}</span>
+              <ChevronDown
+                size={12}
+                className={`text-[#94A3B8] transition-transform ${
+                  langMenuOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            {langMenuOpen && (
+              <div
+                role="listbox"
+                aria-label="Voice language"
+                className="
+                  absolute right-0 mt-2 w-[240px] z-30
+                  rounded-2xl bg-white border border-[#E2E8F0]
+                  shadow-[0_18px_45px_-10px_rgba(15,23,42,0.18),0_6px_18px_-8px_rgba(15,23,42,0.10)]
+                  overflow-hidden
+                  animate-in fade-in slide-in-from-top-1 duration-150
+                "
+              >
+                <div className="px-3 pt-3 pb-1.5">
+                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-[#94A3B8]">
+                    Voice language
+                  </p>
+                </div>
+                <ul className="pb-1.5">
+                  {LANG_OPTIONS.map((opt) => {
+                    const active = opt.value === language
+                    return (
+                      <li key={opt.value}>
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={active}
+                          onClick={() => {
+                            handleLanguageChange(opt.value)
+                            setLangMenuOpen(false)
+                          }}
+                          className={`
+                            w-full flex items-start gap-3 px-3 py-2 text-left
+                            transition-colors
+                            ${active ? 'bg-[#EEF2FF]' : 'hover:bg-[#F8FAFC]'}
+                          `}
+                        >
+                          <span
+                            className={`
+                              mt-0.5 w-5 h-5 rounded-full flex items-center justify-center shrink-0
+                              ${active
+                                ? 'bg-[#4338CA] text-white'
+                                : 'bg-[#F1F5F9] text-transparent border border-[#E2E8F0]'
+                              }
+                            `}
+                          >
+                            <Check size={12} />
+                          </span>
+                          <span className="flex-1 min-w-0">
+                            <p
+                              className={`text-[13px] font-extrabold tracking-tight ${
+                                active ? 'text-[#312E81]' : 'text-[#0F172A]'
+                              }`}
+                            >
+                              {opt.native}
+                              <span className="text-[#94A3B8] font-bold ml-1.5">
+                                · {opt.description}
+                              </span>
+                            </p>
+                            <p className="text-[10.5px] font-semibold text-[#94A3B8] mt-0.5">
+                              {opt.voice}
+                            </p>
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            )}
           </div>
 
           <span
@@ -352,33 +472,47 @@ export default function TimyPanel({ onClose }: Props) {
                 "offline" state so the user gets the same calling-to-action
                 after ending a session as on first open. */}
             <p className="text-[#0F172A] text-[14px] font-extrabold tracking-tight text-center">
-              {language === 'hi-IN'
-                ? isOffline
-                  ? 'बात शुरू करने के लिए नीचे टैप करें'
-                  : session.status === 'listening'
-                  ? 'बोलिए — मैं सुन रहा हूँ'
-                  : session.status === 'speaking'
-                  ? 'Timy बोल रहा है…'
-                  : session.status === 'thinking'
-                  ? 'एक सेकंड…'
-                  : session.status === 'connecting'
-                  ? 'Timy से connect हो रहे हैं…'
-                  : 'जब आप तैयार हों, बता दीजिए'
-                : isOffline
-                ? 'Tap below to start talking'
-                : session.status === 'listening'
-                ? "Go ahead — I'm listening"
-                : session.status === 'speaking'
-                ? 'Timy is speaking…'
-                : session.status === 'thinking'
-                ? 'One moment…'
-                : session.status === 'connecting'
-                ? 'Connecting to Timy…'
-                : 'Ready when you are'}
+              {(() => {
+                const copy: Record<TimyLanguage, Record<string, string>> = {
+                  'en-IN': {
+                    offline: 'Tap below to start talking',
+                    listening: "Go ahead — I'm listening",
+                    speaking: 'Timy is speaking…',
+                    thinking: 'One moment…',
+                    connecting: 'Connecting to Timy…',
+                    fallback: 'Ready when you are',
+                  },
+                  'hi-IN': {
+                    offline: 'बात शुरू करने के लिए नीचे टैप करें',
+                    listening: 'बोलिए — मैं सुन रहा हूँ',
+                    speaking: 'Timy बोल रहा है…',
+                    thinking: 'एक सेकंड…',
+                    connecting: 'Timy से connect हो रहे हैं…',
+                    fallback: 'जब आप तैयार हों, बता दीजिए',
+                  },
+                  'kn-IN': {
+                    offline: 'ಮಾತನಾಡಲು ಕೆಳಗೆ ಟ್ಯಾಪ್ ಮಾಡಿ',
+                    listening: 'ಹೇಳಿ — ನಾನು ಕೇಳ್ತಿದೀನಿ',
+                    speaking: 'Timy ಮಾತಾಡ್ತಿದಾನೆ…',
+                    thinking: 'ಒಂದು ಕ್ಷಣ…',
+                    connecting: 'Timy ಜೊತೆ connect ಆಗ್ತಿದೀವಿ…',
+                    fallback: 'ನೀವು ತಯಾರಿದ್ದರೆ ಶುರು ಮಾಡಿ',
+                  },
+                }
+                const lang = copy[language]
+                if (isOffline) return lang.offline
+                if (session.status === 'listening') return lang.listening
+                if (session.status === 'speaking') return lang.speaking
+                if (session.status === 'thinking') return lang.thinking
+                if (session.status === 'connecting') return lang.connecting
+                return lang.fallback
+              })()}
             </p>
             <p className="text-[#64748B] text-[11.5px] mt-1 font-medium text-center">
               {language === 'hi-IN'
                 ? 'आपके live BuildFlow data से जवाब — leads, follow-ups, calls, team.'
+                : language === 'kn-IN'
+                ? 'ನಿಮ್ಮ live BuildFlow data ಯಿಂದ ಉತ್ತರಗಳು — leads, follow-ups, calls, team.'
                 : 'Voice answers from your live BuildFlow data — leads, follow-ups, calls, team.'}
             </p>
 
@@ -482,7 +616,11 @@ export default function TimyPanel({ onClose }: Props) {
               "
             >
               <Phone size={16} />
-              {language === 'hi-IN' ? 'बात शुरू करें' : 'Start talking'}
+              {language === 'hi-IN'
+                ? 'बात शुरू करें'
+                : language === 'kn-IN'
+                ? 'ಮಾತನಾಡಲು ಶುರು ಮಾಡಿ'
+                : 'Start talking'}
             </button>
           ) : (
             <>
@@ -513,7 +651,13 @@ export default function TimyPanel({ onClose }: Props) {
                   type="text"
                   value={textDraft}
                   onChange={(e) => setTextDraft(e.target.value)}
-                  placeholder={language === 'hi-IN' ? 'मैसेज लिखें…' : 'Type a message…'}
+                  placeholder={
+                    language === 'hi-IN'
+                      ? 'मैसेज लिखें…'
+                      : language === 'kn-IN'
+                      ? 'ಸಂದೇಶ ಬರೆಯಿರಿ…'
+                      : 'Type a message…'
+                  }
                   className="flex-1 bg-transparent text-[#0F172A] placeholder:text-[#94A3B8] text-[13px] font-medium outline-none px-1"
                 />
                 {textDraft.trim() && (

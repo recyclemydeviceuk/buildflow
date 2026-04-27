@@ -35,7 +35,7 @@ export interface TimyTranscriptEntry {
   at: number
 }
 
-export type TimyLanguage = 'en-IN' | 'hi-IN'
+export type TimyLanguage = 'en-IN' | 'hi-IN' | 'kn-IN'
 
 interface SessionOpts {
   onError?: (msg: string) => void
@@ -352,7 +352,12 @@ export const useTimySession = (opts: SessionOpts = {}) => {
         return
       }
       if (msg.type === 'language_switch') {
-        const next: TimyLanguage = msg.language === 'hi-IN' ? 'hi-IN' : 'en-IN'
+        const next: TimyLanguage =
+          msg.language === 'hi-IN'
+            ? 'hi-IN'
+            : msg.language === 'kn-IN'
+            ? 'kn-IN'
+            : 'en-IN'
         onLanguageSwitchRef.current?.(next)
         return
       }
