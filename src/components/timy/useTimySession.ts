@@ -185,6 +185,9 @@ export const useTimySession = (opts: SessionOpts = {}) => {
       // and the click that called start() satisfies that.
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
       audioCtxRef.current = audioCtx
+      // Chrome auto-suspends new AudioContexts; resume explicitly so the
+      // ScriptProcessorNode actually fires onaudioprocess events.
+      try { await audioCtx.resume() } catch {}
       const sampleRate = audioCtx.sampleRate
 
       const source = audioCtx.createMediaStreamSource(micStream)
@@ -226,6 +229,7 @@ export const useTimySession = (opts: SessionOpts = {}) => {
         sampleRate: PLAYBACK_RATE,
       })
       playbackCtxRef.current = playbackCtx
+      try { await playbackCtx.resume() } catch {}
       playbackQueueRef.current.at = playbackCtx.currentTime + 0.1
 
       const outAnalyser = playbackCtx.createAnalyser()
@@ -268,6 +272,8 @@ export const useTimySession = (opts: SessionOpts = {}) => {
       } catch {
         return
       }
+      // eslint-disable-next-line no-console
+      console.debug('[Timy] message', msg.type, msg)
 
       if (msg.type === 'ready') return
       if (msg.type === 'setupComplete') {
@@ -281,7 +287,9 @@ export const useTimySession = (opts: SessionOpts = {}) => {
       }
       if (msg.type === 'upstream_closed') {
         flushAssistant()
-        setStatus('closed')
+        // Don't overwrite an existing 'error' status — the error message has
+        // more detail than a bland "closed".
+        setStatus((prev) => (prev === 'error' ? prev : 'closed'))
         return
       }
       if (msg.type === 'toolCall') {
@@ -295,12 +303,18 @@ export const useTimySession = (opts: SessionOpts = {}) => {
       }
     }
 
-    ws.onerror = () => {
+    ws.onerror = (e) => {
+      // eslint-disable-next-line no-console
+      console.error('[Timy] ws error', e)
       setStatus('error')
-      onErrorRef.current?.('Lost connection to Timy.')
+      onErrorRef.current?.(
+        'Could not reach Timy. Make sure the backend is running and reachable on the same host as VITE_API_URL.'
+      )
     }
 
-    ws.onclose = () => {
+    ws.onclose = (e) => {
+      // eslint-disable-next-line no-console
+      console.warn('[Timy] ws closed', { code: e.code, reason: e.reason })
       setStatus((prev) => (prev === 'error' ? prev : 'closed'))
     }
 
