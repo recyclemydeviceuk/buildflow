@@ -195,6 +195,12 @@ export default function TimyPanel({ onClose }: Props) {
     return 1 + lvl * 0.28
   }, [session.inputLevel, session.outputLevel])
 
+  // "No session is currently active." Covers idle, ended, and errored.
+  const isOffline =
+    session.status === 'idle' ||
+    session.status === 'closed' ||
+    session.status === 'error'
+
   return (
     <div
       className="fixed inset-0 z-[80] bg-white animate-in fade-in duration-200 flex flex-col"
@@ -378,10 +384,12 @@ export default function TimyPanel({ onClose }: Props) {
               })}
             </div>
 
-            {/* Helper copy */}
+            {/* Helper copy. We treat idle / closed / error as a single
+                "offline" state so the user gets the same calling-to-action
+                after ending a session as on first open. */}
             <p className="text-[#0F172A] text-[14px] font-extrabold tracking-tight text-center">
               {language === 'hi-IN'
-                ? session.status === 'idle'
+                ? isOffline
                   ? 'बात शुरू करने के लिए नीचे टैप करें'
                   : session.status === 'listening'
                   ? 'बोलिए — मैं सुन रहा हूँ'
@@ -392,7 +400,7 @@ export default function TimyPanel({ onClose }: Props) {
                   : session.status === 'connecting'
                   ? 'Timy से connect हो रहे हैं…'
                   : 'जब आप तैयार हों, बता दीजिए'
-                : session.status === 'idle'
+                : isOffline
                 ? 'Tap below to start talking'
                 : session.status === 'listening'
                 ? "Go ahead — I'm listening"
@@ -410,8 +418,9 @@ export default function TimyPanel({ onClose }: Props) {
                 : 'Voice answers from your live BuildFlow data — leads, follow-ups, calls, team.'}
             </p>
 
-            {/* Suggestions grid */}
-            {session.status === 'idle' && (
+            {/* Suggestions grid — also shown after a session ends so the
+                user has one-click prompts to restart with. */}
+            {isOffline && (
               <div className="mt-5 w-full grid grid-cols-2 gap-2">
                 {SUGGESTIONS_BY_LANG[language].map((s) => (
                   <button
