@@ -109,6 +109,10 @@ function TimyMark({ size = 36, animate = false }: { size?: number; animate?: boo
 export default function TimyPanel({ onClose }: Props) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [textDraft, setTextDraft] = useState('')
+  // Suggestion clicked while disconnected — fired off once the session is
+  // actually listening. Stored in state (not just a ref) so an effect can
+  // observe both it and `session.status` without stale-closure issues.
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   const [language, setLanguage] = useState<TimyLanguage>(() => {
     try {
       const saved = localStorage.getItem(LANG_STORAGE_KEY)
@@ -166,6 +170,19 @@ export default function TimyPanel({ onClose }: Props) {
     if (!el) return
     el.scrollTop = el.scrollHeight
   }, [session.transcript.length, session.activeTool])
+
+  // Once the session reaches 'listening' (post-handshake), flush any
+  // suggestion the user clicked while disconnected. Clears the pending
+  // prompt on session close/error so a stale click doesn't fire later.
+  useEffect(() => {
+    if (!pendingPrompt) return
+    if (session.status === 'listening') {
+      session.sendText(pendingPrompt)
+      setPendingPrompt(null)
+    } else if (session.status === 'error' || session.status === 'closed') {
+      setPendingPrompt(null)
+    }
+  }, [pendingPrompt, session.status, session])
 
   const statusMeta = STATUS_META[session.status] || STATUS_META.idle
   const isLive =
@@ -401,17 +418,19 @@ export default function TimyPanel({ onClose }: Props) {
                     key={s.title}
                     type="button"
                     onClick={() => {
-                      session.start().then(() => {
-                        const tryUntil = Date.now() + 5000
-                        const tick = () => {
-                          if (session.status === 'listening') {
-                            session.sendText(s.prompt)
-                          } else if (Date.now() < tryUntil) {
-                            setTimeout(tick, 150)
-                          }
-                        }
-                        setTimeout(tick, 200)
-                      })
+                      setErrorMsg(null)
+                      // Fire-and-forget: queue the prompt and start. The
+                      // effect above sends it the moment status === 'listening'.
+                      if (
+                        session.status === 'listening' ||
+                        session.status === 'speaking' ||
+                        session.status === 'thinking'
+                      ) {
+                        session.sendText(s.prompt)
+                      } else {
+                        setPendingPrompt(s.prompt)
+                        session.start()
+                      }
                     }}
                     className="
                       group text-left px-3 py-2.5 rounded-xl
