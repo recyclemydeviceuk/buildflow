@@ -8,6 +8,7 @@ import type { Call } from '../../api/calls'
 import { followUpsAPI, type FollowUpRecord } from '../../api/followUps'
 import { leadsAPI } from '../../api/leads'
 import { PhoneIncoming, ArrowUpRight, CalendarClock, CheckCircle2, Clock3, UserCheck, Phone, MapPin } from 'lucide-react'
+import TimyButton from '../timy/TimyButton'
 
 type PendingAssignment = {
   leadId: string
@@ -370,6 +371,9 @@ export default function Layout() {
           </div>
         </div>
       )}
+
+      {/* Timy AI — global voice assistant. Floating button on every page. */}
+      <TimyButton />
 
       {followUpPopup && (
         <div className="fixed inset-0 z-[60] bg-black/55 backdrop-blur-[6px] flex items-center justify-center p-4">
