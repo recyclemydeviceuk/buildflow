@@ -254,8 +254,8 @@ export default function LeadList() {
   }
   // Derive visible ordered column keys once per render to simplify the JSX below.
   const visibleColumnKeys = columnConfig.filter((c) => c.visible).map((c) => c.key)
-  // The Actions column is manager-only regardless of the user's preference.
-  const effectiveColumnKeys = visibleColumnKeys.filter((k) => k !== 'actions' || isManager)
+  // The Actions column is shown to everyone — reps see WhatsApp + View, managers see WhatsApp + Delete.
+  const effectiveColumnKeys = visibleColumnKeys
   // Total span for empty/loading rows: 1 (checkbox col) + visible columns + 1 (trailing chevron)
   const tableColSpan = 1 + effectiveColumnKeys.length + 1
 
