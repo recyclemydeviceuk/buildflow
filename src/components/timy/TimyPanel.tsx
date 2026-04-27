@@ -19,25 +19,6 @@ interface Props {
   onClose: () => void
 }
 
-const SUGGESTIONS_BY_LANG: Record<TimyLanguage, { title: string; prompt: string }[]> = {
-  'en-IN': [
-    { title: "Today's follow-ups", prompt: 'What follow-ups do I have today?' },
-    { title: 'Pipeline summary',   prompt: 'Summarize my pipeline' },
-    { title: 'Overdue follow-ups', prompt: 'Show me overdue follow-ups' },
-    { title: 'Latest leads',       prompt: 'Show me leads from this week' },
-    { title: 'My recent calls',    prompt: 'Read out my last 5 calls' },
-    { title: 'Find a lead',        prompt: 'Find lead by name…' },
-  ],
-  'hi-IN': [
-    { title: 'आज के follow-ups',    prompt: 'आज मेरे पास कितने follow-up हैं?' },
-    { title: 'Pipeline का summary', prompt: 'मेरी pipeline का summary बताओ' },
-    { title: 'Overdue follow-ups',  prompt: 'कौन-कौन से follow-up overdue हैं?' },
-    { title: 'इस हफ़्ते के leads',  prompt: 'इस हफ़्ते के नए leads दिखाओ' },
-    { title: 'पिछले calls',         prompt: 'मेरी पिछली पाँच calls बताओ' },
-    { title: 'Lead खोजो',           prompt: 'नाम से एक lead ढूँढो…' },
-  ],
-}
-
 const STATUS_META: Record<
   string,
   { label: string; tone: string; dot: string; pulse?: boolean; glow: string }
@@ -109,10 +90,6 @@ function TimyMark({ size = 36, animate = false }: { size?: number; animate?: boo
 export default function TimyPanel({ onClose }: Props) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [textDraft, setTextDraft] = useState('')
-  // Suggestion clicked while disconnected — fired off once the session is
-  // actually listening. Stored in state (not just a ref) so an effect can
-  // observe both it and `session.status` without stale-closure issues.
-  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   const [language, setLanguage] = useState<TimyLanguage>(() => {
     try {
       const saved = localStorage.getItem(LANG_STORAGE_KEY)
@@ -170,19 +147,6 @@ export default function TimyPanel({ onClose }: Props) {
     if (!el) return
     el.scrollTop = el.scrollHeight
   }, [session.transcript.length, session.activeTool])
-
-  // Once the session reaches 'listening' (post-handshake), flush any
-  // suggestion the user clicked while disconnected. Clears the pending
-  // prompt on session close/error so a stale click doesn't fire later.
-  useEffect(() => {
-    if (!pendingPrompt) return
-    if (session.status === 'listening') {
-      session.sendText(pendingPrompt)
-      setPendingPrompt(null)
-    } else if (session.status === 'error' || session.status === 'closed') {
-      setPendingPrompt(null)
-    }
-  }, [pendingPrompt, session.status, session])
 
   const statusMeta = STATUS_META[session.status] || STATUS_META.idle
   const isLive =
@@ -418,47 +382,6 @@ export default function TimyPanel({ onClose }: Props) {
                 : 'Voice answers from your live BuildFlow data — leads, follow-ups, calls, team.'}
             </p>
 
-            {/* Suggestions grid — also shown after a session ends so the
-                user has one-click prompts to restart with. */}
-            {isOffline && (
-              <div className="mt-5 w-full grid grid-cols-2 gap-2">
-                {SUGGESTIONS_BY_LANG[language].map((s) => (
-                  <button
-                    key={s.title}
-                    type="button"
-                    onClick={() => {
-                      setErrorMsg(null)
-                      // Fire-and-forget: queue the prompt and start. The
-                      // effect above sends it the moment status === 'listening'.
-                      if (
-                        session.status === 'listening' ||
-                        session.status === 'speaking' ||
-                        session.status === 'thinking'
-                      ) {
-                        session.sendText(s.prompt)
-                      } else {
-                        setPendingPrompt(s.prompt)
-                        session.start()
-                      }
-                    }}
-                    className="
-                      group text-left px-3 py-2.5 rounded-xl
-                      bg-white border border-[#E2E8F0]
-                      hover:border-[#A5B4FC] hover:bg-[#F8FAFC]
-                      shadow-sm hover:shadow-md
-                      transition-all
-                    "
-                  >
-                    <p className="text-[12px] font-extrabold text-[#0F172A] tracking-tight group-hover:text-[#4338CA] transition-colors leading-tight">
-                      {s.title}
-                    </p>
-                    <p className="text-[10.5px] text-[#94A3B8] font-semibold mt-0.5 line-clamp-1">
-                      {s.prompt}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
         </section>
 
