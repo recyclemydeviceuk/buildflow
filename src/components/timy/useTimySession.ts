@@ -41,6 +41,8 @@ interface SessionOpts {
   onError?: (msg: string) => void
   /** Voice language. Defaults to Indian English. */
   language?: TimyLanguage
+  /** Fired when the model calls switch_language — UI should flip the toggle. */
+  onLanguageSwitch?: (next: TimyLanguage) => void
 }
 
 const computeWsUrl = (): string => {
@@ -61,6 +63,8 @@ const computeWsUrl = (): string => {
 export const useTimySession = (opts: SessionOpts = {}) => {
   const onErrorRef = useRef(opts.onError)
   onErrorRef.current = opts.onError
+  const onLanguageSwitchRef = useRef(opts.onLanguageSwitch)
+  onLanguageSwitchRef.current = opts.onLanguageSwitch
   const languageRef = useRef<TimyLanguage>(opts.language || 'en-IN')
   languageRef.current = opts.language || 'en-IN'
 
@@ -303,6 +307,11 @@ export const useTimySession = (opts: SessionOpts = {}) => {
       if (msg.type === 'toolCall') {
         setActiveTool(msg.name)
         appendEntry('tool', `Looking up ${prettyToolName(msg.name)}…`)
+        return
+      }
+      if (msg.type === 'language_switch') {
+        const next: TimyLanguage = msg.language === 'hi-IN' ? 'hi-IN' : 'en-IN'
+        onLanguageSwitchRef.current?.(next)
         return
       }
       if (msg.type === 'serverContent') {

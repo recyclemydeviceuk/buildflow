@@ -118,10 +118,20 @@ export default function TimyPanel({ onClose }: Props) {
     }
     return 'en-IN'
   })
-  const session = useTimySession({ onError: (m) => setErrorMsg(m), language })
+  // Forward declaration so the session hook can call back into the panel
+  // when Gemini fires the switch_language tool. Using a ref lets us read the
+  // *current* handler without pulling it into the hook's dep list.
+  const handleLanguageChangeRef = useRef<(next: TimyLanguage) => void>(() => {})
+
+  const session = useTimySession({
+    onError: (m) => setErrorMsg(m),
+    language,
+    onLanguageSwitch: (next) => handleLanguageChangeRef.current(next),
+  })
   const transcriptRef = useRef<HTMLDivElement>(null)
 
-  // Persist preference + restart session in the new language if one is live
+  // Persist preference + restart session in the new language if one is live.
+  // Used both by the manual pill toggle and by the model-triggered switch.
   const handleLanguageChange = useCallback(
     (next: TimyLanguage) => {
       if (next === language) return
@@ -138,12 +148,18 @@ export default function TimyPanel({ onClose }: Props) {
         session.status === 'connecting'
       if (wasLive) {
         session.stop()
-        // Wait one tick so the session ref refreshes language before restart
-        setTimeout(() => session.start(), 200)
+        // Wait long enough for the old session's confirmation audio to play,
+        // then reconnect so Gemini's new setup picks up the new languageCode
+        // and prebuilt voice.
+        setTimeout(() => session.start(), 500)
       }
     },
     [language, session]
   )
+
+  // Keep the ref pointing at the latest handler so the model-triggered path
+  // always sees the freshest closure.
+  handleLanguageChangeRef.current = handleLanguageChange
 
   useEffect(() => {
     const el = transcriptRef.current
