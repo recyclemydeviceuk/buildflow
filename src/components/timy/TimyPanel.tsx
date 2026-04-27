@@ -245,7 +245,10 @@ export default function TimyPanel({ onClose }: Props) {
       />
 
       {/* ── Header ─────────────────────────────────────────────────── */}
-      <header className="relative z-10 px-6 lg:px-10 py-4 border-b border-[#EEF2F7] bg-white/80 backdrop-blur flex items-center justify-between">
+      {/* z-30 so the language dropdown that overflows the header paints
+          above the <main> grid (which is z-10 and comes later in the DOM,
+          so without a higher header z-index it would cover the popover). */}
+      <header className="relative z-30 px-6 lg:px-10 py-4 border-b border-[#EEF2F7] bg-white/80 backdrop-blur flex items-center justify-between">
         <div className="flex items-center gap-3.5">
           <div
             className="relative shrink-0"
@@ -309,11 +312,10 @@ export default function TimyPanel({ onClose }: Props) {
                 role="listbox"
                 aria-label="Voice language"
                 className="
-                  absolute right-0 mt-2 w-[240px] z-30
+                  absolute right-0 top-[calc(100%+8px)] w-[260px] z-[100]
                   rounded-2xl bg-white border border-[#E2E8F0]
                   shadow-[0_18px_45px_-10px_rgba(15,23,42,0.18),0_6px_18px_-8px_rgba(15,23,42,0.10)]
                   overflow-hidden
-                  animate-in fade-in slide-in-from-top-1 duration-150
                 "
               >
                 <div className="px-3 pt-3 pb-1.5">
