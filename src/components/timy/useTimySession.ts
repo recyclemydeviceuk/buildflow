@@ -35,8 +35,12 @@ export interface TimyTranscriptEntry {
   at: number
 }
 
+export type TimyLanguage = 'en-IN' | 'hi-IN'
+
 interface SessionOpts {
   onError?: (msg: string) => void
+  /** Voice language. Defaults to Indian English. */
+  language?: TimyLanguage
 }
 
 const computeWsUrl = (): string => {
@@ -57,6 +61,8 @@ const computeWsUrl = (): string => {
 export const useTimySession = (opts: SessionOpts = {}) => {
   const onErrorRef = useRef(opts.onError)
   onErrorRef.current = opts.onError
+  const languageRef = useRef<TimyLanguage>(opts.language || 'en-IN')
+  languageRef.current = opts.language || 'en-IN'
 
   const [status, setStatus] = useState<TimyStatus>('idle')
   const [transcript, setTranscript] = useState<TimyTranscriptEntry[]>([])
@@ -167,7 +173,9 @@ export const useTimySession = (opts: SessionOpts = {}) => {
 
     micStreamRef.current = micStream
 
-    const wsUrl = `${computeWsUrl()}?token=${encodeURIComponent(token)}`
+    const wsUrl = `${computeWsUrl()}?token=${encodeURIComponent(token)}&lang=${encodeURIComponent(
+      languageRef.current
+    )}`
     let ws: WebSocket
     try {
       ws = new WebSocket(wsUrl)

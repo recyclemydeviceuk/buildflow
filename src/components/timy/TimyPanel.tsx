@@ -1,22 +1,42 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   X, Mic, MicOff, Phone, PhoneOff, Send,
-  Loader2, AlertCircle, ShieldCheck, Volume2, MessageSquare,
+  Loader2, AlertCircle, ShieldCheck, Volume2, MessageSquare, Languages,
 } from 'lucide-react'
-import { useTimySession } from './useTimySession'
+import { useTimySession, type TimyLanguage } from './useTimySession'
+
+const LANG_STORAGE_KEY = 'timy:language'
+
+const isLanguage = (v: string | null): v is TimyLanguage =>
+  v === 'en-IN' || v === 'hi-IN'
+
+const LANG_OPTIONS: { value: TimyLanguage; label: string; native: string }[] = [
+  { value: 'en-IN', label: 'English', native: 'English (IN)' },
+  { value: 'hi-IN', label: 'हिन्दी',   native: 'हिन्दी' },
+]
 
 interface Props {
   onClose: () => void
 }
 
-const SUGGESTIONS = [
-  { title: 'Today\'s follow-ups',  prompt: 'What follow-ups do I have today?' },
-  { title: 'Pipeline summary',     prompt: 'Summarize my pipeline' },
-  { title: 'Overdue follow-ups',   prompt: 'Show me overdue follow-ups' },
-  { title: 'Latest leads',         prompt: 'Show me leads from this week' },
-  { title: 'My recent calls',      prompt: 'Read out my last 5 calls' },
-  { title: 'Find a lead',          prompt: 'Find lead by name…' },
-]
+const SUGGESTIONS_BY_LANG: Record<TimyLanguage, { title: string; prompt: string }[]> = {
+  'en-IN': [
+    { title: "Today's follow-ups", prompt: 'What follow-ups do I have today?' },
+    { title: 'Pipeline summary',   prompt: 'Summarize my pipeline' },
+    { title: 'Overdue follow-ups', prompt: 'Show me overdue follow-ups' },
+    { title: 'Latest leads',       prompt: 'Show me leads from this week' },
+    { title: 'My recent calls',    prompt: 'Read out my last 5 calls' },
+    { title: 'Find a lead',        prompt: 'Find lead by name…' },
+  ],
+  'hi-IN': [
+    { title: 'आज के follow-ups',    prompt: 'आज मेरे पास कितने follow-up हैं?' },
+    { title: 'Pipeline का summary', prompt: 'मेरी pipeline का summary बताओ' },
+    { title: 'Overdue follow-ups',  prompt: 'कौन-कौन से follow-up overdue हैं?' },
+    { title: 'इस हफ़्ते के leads',  prompt: 'इस हफ़्ते के नए leads दिखाओ' },
+    { title: 'पिछले calls',         prompt: 'मेरी पिछली पाँच calls बताओ' },
+    { title: 'Lead खोजो',           prompt: 'नाम से एक lead ढूँढो…' },
+  ],
+}
 
 const STATUS_META: Record<
   string,
@@ -89,8 +109,41 @@ function TimyMark({ size = 36, animate = false }: { size?: number; animate?: boo
 export default function TimyPanel({ onClose }: Props) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [textDraft, setTextDraft] = useState('')
-  const session = useTimySession({ onError: (m) => setErrorMsg(m) })
+  const [language, setLanguage] = useState<TimyLanguage>(() => {
+    try {
+      const saved = localStorage.getItem(LANG_STORAGE_KEY)
+      if (isLanguage(saved)) return saved
+    } catch {
+      // ignore
+    }
+    return 'en-IN'
+  })
+  const session = useTimySession({ onError: (m) => setErrorMsg(m), language })
   const transcriptRef = useRef<HTMLDivElement>(null)
+
+  // Persist preference + restart session in the new language if one is live
+  const handleLanguageChange = useCallback(
+    (next: TimyLanguage) => {
+      if (next === language) return
+      setLanguage(next)
+      try {
+        localStorage.setItem(LANG_STORAGE_KEY, next)
+      } catch {
+        // ignore
+      }
+      const wasLive =
+        session.status === 'listening' ||
+        session.status === 'speaking' ||
+        session.status === 'thinking' ||
+        session.status === 'connecting'
+      if (wasLive) {
+        session.stop()
+        // Wait one tick so the session ref refreshes language before restart
+        setTimeout(() => session.start(), 200)
+      }
+    },
+    [language, session]
+  )
 
   useEffect(() => {
     const el = transcriptRef.current
@@ -168,6 +221,37 @@ export default function TimyPanel({ onClose }: Props) {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Language toggle */}
+          <div
+            className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-[#F8FAFC] border border-[#E2E8F0]"
+            role="group"
+            aria-label="Voice language"
+          >
+            <Languages size={12} className="text-[#94A3B8] ml-1.5 mr-0.5" />
+            {LANG_OPTIONS.map((opt) => {
+              const active = language === opt.value
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => handleLanguageChange(opt.value)}
+                  title={`Talk to Timy in ${opt.native}`}
+                  aria-pressed={active}
+                  className={`
+                    px-2.5 py-1 rounded-full text-[11px] font-extrabold tracking-tight transition-all
+                    ${
+                      active
+                        ? 'bg-white text-[#1D4ED8] shadow-[0_2px_6px_-1px_rgba(15,23,42,0.10)] border border-[#DBEAFE]'
+                        : 'text-[#64748B] hover:text-[#0F172A]'
+                    }
+                  `}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+
           <span
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#F8FAFC] border border-[#E2E8F0] text-[11px] font-bold ${statusMeta.tone}`}
           >
@@ -263,10 +347,22 @@ export default function TimyPanel({ onClose }: Props) {
 
             {/* Helper copy */}
             <p className="text-[#0F172A] text-[14px] font-extrabold tracking-tight text-center">
-              {session.status === 'idle'
+              {language === 'hi-IN'
+                ? session.status === 'idle'
+                  ? 'बात शुरू करने के लिए नीचे टैप करें'
+                  : session.status === 'listening'
+                  ? 'बोलिए — मैं सुन रहा हूँ'
+                  : session.status === 'speaking'
+                  ? 'Timy बोल रहा है…'
+                  : session.status === 'thinking'
+                  ? 'एक सेकंड…'
+                  : session.status === 'connecting'
+                  ? 'Timy से connect हो रहे हैं…'
+                  : 'जब आप तैयार हों, बता दीजिए'
+                : session.status === 'idle'
                 ? 'Tap below to start talking'
                 : session.status === 'listening'
-                ? 'Go ahead — I\'m listening'
+                ? "Go ahead — I'm listening"
                 : session.status === 'speaking'
                 ? 'Timy is speaking…'
                 : session.status === 'thinking'
@@ -276,13 +372,15 @@ export default function TimyPanel({ onClose }: Props) {
                 : 'Ready when you are'}
             </p>
             <p className="text-[#64748B] text-[11.5px] mt-1 font-medium text-center">
-              Voice answers from your live BuildFlow data — leads, follow-ups, calls, team.
+              {language === 'hi-IN'
+                ? 'आपके live BuildFlow data से जवाब — leads, follow-ups, calls, team.'
+                : 'Voice answers from your live BuildFlow data — leads, follow-ups, calls, team.'}
             </p>
 
             {/* Suggestions grid */}
             {session.status === 'idle' && (
               <div className="mt-5 w-full grid grid-cols-2 gap-2">
-                {SUGGESTIONS.map((s) => (
+                {SUGGESTIONS_BY_LANG[language].map((s) => (
                   <button
                     key={s.title}
                     type="button"
@@ -417,7 +515,7 @@ export default function TimyPanel({ onClose }: Props) {
               "
             >
               <Phone size={16} />
-              Start talking
+              {language === 'hi-IN' ? 'बात शुरू करें' : 'Start talking'}
             </button>
           ) : (
             <>
@@ -448,7 +546,7 @@ export default function TimyPanel({ onClose }: Props) {
                   type="text"
                   value={textDraft}
                   onChange={(e) => setTextDraft(e.target.value)}
-                  placeholder="Type a message…"
+                  placeholder={language === 'hi-IN' ? 'मैसेज लिखें…' : 'Type a message…'}
                   className="flex-1 bg-transparent text-[#0F172A] placeholder:text-[#94A3B8] text-[13px] font-medium outline-none px-1"
                 />
                 {textDraft.trim() && (
