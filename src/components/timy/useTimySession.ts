@@ -45,6 +45,28 @@ interface SessionOpts {
   onLanguageSwitch?: (next: TimyLanguage) => void
 }
 
+/**
+ * Encode the recent conversation as a compact base64-JSON blob the backend
+ * can splice into the system prompt of the new session, so language switches
+ * don't reset the chat.
+ */
+const encodeHistory = (
+  entries: { role: 'user' | 'assistant' | 'tool'; text: string }[]
+): string => {
+  const tail = entries
+    .filter((e) => e.role === 'user' || e.role === 'assistant')
+    .slice(-8) // last 8 turns is enough to feel continuous without bloating the prompt
+    .map((e) => ({ role: e.role, text: e.text }))
+  if (tail.length === 0) return ''
+  try {
+    const json = JSON.stringify(tail)
+    // unescape + encodeURIComponent is the canonical "btoa for utf-8 strings"
+    return btoa(unescape(encodeURIComponent(json)))
+  } catch {
+    return ''
+  }
+}
+
 const computeWsUrl = (): string => {
   // The REST API base is exposed via VITE_API_URL (e.g. http://localhost:5000/api).
   // Strip the trailing /api and switch the protocol to ws/wss.
@@ -74,6 +96,10 @@ export const useTimySession = (opts: SessionOpts = {}) => {
   const [muted, setMuted] = useState(false)
   const [inputLevel, setInputLevel] = useState(0)
   const [outputLevel, setOutputLevel] = useState(0)
+  // Mirror of `transcript` we can read synchronously inside start() without
+  // pulling the state into the start() dependency list (would re-create the
+  // callback on every transcript change and break stale-closure invariants).
+  const transcriptRef = useRef<TimyTranscriptEntry[]>([])
 
   const wsRef = useRef<WebSocket | null>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
@@ -93,10 +119,19 @@ export const useTimySession = (opts: SessionOpts = {}) => {
 
   const appendEntry = useCallback((role: TimyTranscriptEntry['role'], text: string) => {
     if (!text.trim()) return
-    setTranscript((prev) => [
-      ...prev,
-      { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, role, text, at: Date.now() },
-    ])
+    setTranscript((prev) => {
+      const next = [
+        ...prev,
+        {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          role,
+          text,
+          at: Date.now(),
+        },
+      ]
+      transcriptRef.current = next
+      return next
+    })
   }, [])
 
   const flushUser = useCallback(() => {
@@ -139,11 +174,16 @@ export const useTimySession = (opts: SessionOpts = {}) => {
     setActiveTool(null)
     setInputLevel(0)
     setOutputLevel(0)
+    // Transcript intentionally kept in state so a follow-up start() (e.g.
+    // after a language switch) replays it as conversation history.
   }, [flushUser, flushAssistant])
 
   const start = useCallback(async () => {
     if (status === 'connecting' || status === 'listening' || status === 'speaking') return
-    setTranscript([])
+    // NOTE: we deliberately don't reset the transcript here. That way a
+    // language switch (which calls stop() then start()) keeps the chat on
+    // screen, and we pass the recent turns to the backend so Gemini picks
+    // up the conversation in the new voice instead of starting fresh.
     setStatus('connecting')
     userBufferRef.current = ''
     assistantBufferRef.current = ''
@@ -177,9 +217,11 @@ export const useTimySession = (opts: SessionOpts = {}) => {
 
     micStreamRef.current = micStream
 
-    const wsUrl = `${computeWsUrl()}?token=${encodeURIComponent(token)}&lang=${encodeURIComponent(
-      languageRef.current
-    )}`
+    const historyParam = encodeHistory(transcriptRef.current)
+    const wsUrl =
+      `${computeWsUrl()}?token=${encodeURIComponent(token)}` +
+      `&lang=${encodeURIComponent(languageRef.current)}` +
+      (historyParam ? `&history=${encodeURIComponent(historyParam)}` : '')
     let ws: WebSocket
     try {
       ws = new WebSocket(wsUrl)
