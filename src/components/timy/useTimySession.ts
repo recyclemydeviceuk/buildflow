@@ -33,6 +33,14 @@ export interface TimyTranscriptEntry {
   text: string
   /** ms timestamp */
   at: number
+  /** Tool-specific metadata. Only present when role === 'tool'. */
+  tool?: {
+    name: string
+    status: 'running' | 'done' | 'error'
+    args?: Record<string, any>
+    summary?: string
+    durationMs?: number
+  }
 }
 
 export type TimyLanguage = 'en-IN' | 'hi-IN' | 'kn-IN'
@@ -108,6 +116,10 @@ export const useTimySession = (opts: SessionOpts = {}) => {
   const processorRef = useRef<ScriptProcessorNode | null>(null)
   const playbackQueueRef = useRef<{ at: number }>({ at: 0 })
   const playbackCtxRef = useRef<AudioContext | null>(null)
+  // Tracks every AudioBufferSourceNode currently scheduled or playing so we
+  // can hard-stop them on interrupt / barge-in. Without this, a previous turn
+  // keeps playing while the new one starts → audible double-speak.
+  const activeSourcesRef = useRef<AudioBufferSourceNode[]>([])
   const mutedRef = useRef(false)
   const userBufferRef = useRef('')
   const assistantBufferRef = useRef('')
@@ -117,22 +129,30 @@ export const useTimySession = (opts: SessionOpts = {}) => {
 
   mutedRef.current = muted
 
-  const appendEntry = useCallback((role: TimyTranscriptEntry['role'], text: string) => {
-    if (!text.trim()) return
-    setTranscript((prev) => {
-      const next = [
-        ...prev,
-        {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          role,
-          text,
-          at: Date.now(),
-        },
-      ]
-      transcriptRef.current = next
-      return next
-    })
-  }, [])
+  const appendEntry = useCallback(
+    (
+      role: TimyTranscriptEntry['role'],
+      text: string,
+      tool?: TimyTranscriptEntry['tool']
+    ) => {
+      if (!text.trim()) return
+      setTranscript((prev) => {
+        const next: TimyTranscriptEntry[] = [
+          ...prev,
+          {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            role,
+            text,
+            at: Date.now(),
+            tool,
+          },
+        ]
+        transcriptRef.current = next
+        return next
+      })
+    },
+    []
+  )
 
   const flushUser = useCallback(() => {
     if (userBufferRef.current.trim()) {
@@ -148,9 +168,26 @@ export const useTimySession = (opts: SessionOpts = {}) => {
     }
   }, [appendEntry])
 
+  // Stop every currently-scheduled audio buffer source. Used on interrupt
+  // (model decided to abandon the current turn) and on full session stop.
+  const stopAllPlayback = useCallback(() => {
+    for (const node of activeSourcesRef.current) {
+      try { node.stop() } catch {}
+      try { node.disconnect() } catch {}
+    }
+    activeSourcesRef.current = []
+    const ctx = playbackCtxRef.current
+    if (ctx) {
+      // Reset the queue cursor so the next chunk plays immediately rather
+      // than waiting for the old (now-cancelled) tail to finish.
+      playbackQueueRef.current.at = ctx.currentTime
+    }
+  }, [])
+
   const stop = useCallback(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
     rafRef.current = null
+    stopAllPlayback()
     try { processorRef.current?.disconnect() } catch {}
     try { sourceNodeRef.current?.disconnect() } catch {}
     try { inputAnalyserRef.current?.disconnect() } catch {}
@@ -170,13 +207,27 @@ export const useTimySession = (opts: SessionOpts = {}) => {
     playbackQueueRef.current.at = 0
     flushUser()
     flushAssistant()
+    // Any tool card still in 'running' when the session ends is orphaned —
+    // mark it errored so the spinner doesn't keep ticking after disconnect.
+    setTranscript((prev) => {
+      let mutated = false
+      const next = prev.map((e) => {
+        if (e.role === 'tool' && e.tool?.status === 'running') {
+          mutated = true
+          return { ...e, tool: { ...e.tool, status: 'error' as const, summary: e.tool.summary || 'Cancelled' } }
+        }
+        return e
+      })
+      if (mutated) transcriptRef.current = next
+      return mutated ? next : prev
+    })
     setStatus('closed')
     setActiveTool(null)
     setInputLevel(0)
     setOutputLevel(0)
     // Transcript intentionally kept in state so a follow-up start() (e.g.
     // after a language switch) replays it as conversation history.
-  }, [flushUser, flushAssistant])
+  }, [flushUser, flushAssistant, stopAllPlayback])
 
   const start = useCallback(async () => {
     if (status === 'connecting' || status === 'listening' || status === 'speaking') return
@@ -346,9 +397,59 @@ export const useTimySession = (opts: SessionOpts = {}) => {
         setStatus((prev) => (prev === 'error' ? prev : 'closed'))
         return
       }
+      // Legacy single-event path (kept for older relays). Newer relays emit
+      // toolStart + toolResult so the UI can show progress and outcome.
       if (msg.type === 'toolCall') {
         setActiveTool(msg.name)
-        appendEntry('tool', `Looking up ${prettyToolName(msg.name)}…`)
+        appendEntry('tool', prettyToolName(msg.name), {
+          name: msg.name,
+          status: 'running',
+          args: msg.args,
+        })
+        return
+      }
+      if (msg.type === 'toolStart') {
+        setActiveTool(msg.name)
+        // Flush any in-flight assistant text first so the activity card slots
+        // in between turns rather than mid-sentence.
+        flushAssistant()
+        setTranscript((prev) => {
+          const next: TimyTranscriptEntry[] = [
+            ...prev,
+            {
+              id: msg.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              role: 'tool',
+              text: prettyToolName(msg.name),
+              at: Date.now(),
+              tool: { name: msg.name, status: 'running', args: msg.args },
+            },
+          ]
+          transcriptRef.current = next
+          return next
+        })
+        return
+      }
+      if (msg.type === 'toolResult') {
+        const finalStatus: 'done' | 'error' = msg.ok ? 'done' : 'error'
+        setTranscript((prev) => {
+          const next: TimyTranscriptEntry[] = prev.map((e) =>
+            e.id === msg.id && e.role === 'tool' && e.tool
+              ? {
+                  ...e,
+                  tool: {
+                    ...e.tool,
+                    status: finalStatus,
+                    summary: typeof msg.summary === 'string' ? msg.summary : e.tool.summary,
+                    durationMs: typeof msg.durationMs === 'number' ? msg.durationMs : e.tool.durationMs,
+                  },
+                }
+              : e
+          )
+          transcriptRef.current = next
+          return next
+        })
+        // Clear the active tool indicator only if this was the current one.
+        setActiveTool((prev) => (prev === msg.name ? null : prev))
         return
       }
       if (msg.type === 'language_switch') {
@@ -413,7 +514,15 @@ export const useTimySession = (opts: SessionOpts = {}) => {
         )
       }
       if (content?.interrupted) {
-        playbackQueueRef.current.at = playbackCtxRef.current?.currentTime || 0
+        // Hard-cut all in-flight audio so the new turn doesn't overlap with
+        // the abandoned one (the prior implementation only reset the queue
+        // cursor, which let already-scheduled buffers keep playing → the
+        // "Timy talks twice" bug).
+        stopAllPlayback()
+        // Drop any half-baked assistant text from the old turn so the
+        // transcript doesn't show a sentence Timy never finished.
+        assistantBufferRef.current = ''
+        setStatus((prev) => (prev === 'speaking' ? 'listening' : prev))
       }
     }
 
@@ -432,6 +541,13 @@ export const useTimySession = (opts: SessionOpts = {}) => {
       node.connect(out)
       const startAt = Math.max(playbackQueueRef.current.at, ctx.currentTime + 0.02)
       node.start(startAt)
+      activeSourcesRef.current.push(node)
+      // Auto-deregister when this chunk finishes so the active list stays
+      // bounded and stopAllPlayback() doesn't stop already-finished nodes.
+      node.onended = () => {
+        const i = activeSourcesRef.current.indexOf(node)
+        if (i >= 0) activeSourcesRef.current.splice(i, 1)
+      }
       playbackQueueRef.current.at = startAt + buffer.duration
     }
   }, [appendEntry, flushAssistant, flushUser, status])
