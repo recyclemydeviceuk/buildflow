@@ -5,7 +5,8 @@ import { leadsAPI, type Lead } from '../api/leads'
 import type { LeadFieldConfig } from '../api/settings'
 import { callsAPI } from '../api/calls'
 import { teamAPI } from '../api/team'
-import FancyDropdown, { type FancyDropdownOption } from '../components/common/FancyDropdown'
+import { type FancyDropdownOption } from '../components/common/FancyDropdown'
+import FancyMultiSelect from '../components/common/FancyMultiSelect'
 import BulkEditLeadsModal from '../components/leads/BulkEditLeadsModal'
 import CreatedAtEditor, { formatDateTimeLocalInput } from '../components/leads/CreatedAtEditor'
 import ManualLeadModal from '../components/leads/ManualLeadModal'
@@ -49,13 +50,22 @@ const sourceColors: Record<string, string> = {
 const LEAD_LIST_FILTERS_STORAGE_KEY = 'buildflow:lead-list-filters'
 
 type PersistedLeadFilters = {
-  city: string
-  disposition: string
-  owner: string
+  city: string[]
+  disposition: string[]
+  owner: string[]
   paginationMode: 'on' | 'off'
   search: string
-  source: string
+  source: string[]
+  followUp: string[]
   dateRange: { from: string | null; to: string | null }
+}
+
+// Tolerates both legacy single-string filters (pre-multi-select) and the
+// new string[] shape. Stops a stale localStorage entry from blowing up.
+const coerceToArray = (raw: unknown): string[] => {
+  if (Array.isArray(raw)) return raw.filter((v) => typeof v === 'string' && v && v !== 'All')
+  if (typeof raw === 'string' && raw && raw !== 'All') return [raw]
+  return []
 }
 
 // Module-level snapshot — survives unmount when the user navigates into a lead
@@ -87,53 +97,41 @@ const findMainAncestor = (start: HTMLElement | null): HTMLElement | null => {
   return null
 }
 
+const emptyPersistedFilters = (): PersistedLeadFilters => ({
+  city: [],
+  disposition: [],
+  owner: [],
+  paginationMode: 'on',
+  search: '',
+  source: [],
+  followUp: [],
+  dateRange: { from: null, to: null },
+})
+
 const readPersistedLeadFilters = (): PersistedLeadFilters => {
-  if (typeof window === 'undefined') {
-    return {
-      city: 'All',
-      disposition: 'All',
-      owner: 'All',
-      paginationMode: 'on',
-      search: '',
-      source: 'All',
-      dateRange: { from: null, to: null },
-    }
-  }
+  if (typeof window === 'undefined') return emptyPersistedFilters()
 
   try {
     const rawValue = window.localStorage.getItem(LEAD_LIST_FILTERS_STORAGE_KEY)
-    if (!rawValue) {
-      return {
-        city: 'All',
-        disposition: 'All',
-        owner: 'All',
-        paginationMode: 'on',
-        search: '',
-        source: 'All',
-        dateRange: { from: null, to: null },
-      }
-    }
+    if (!rawValue) return emptyPersistedFilters()
 
-    const parsed = JSON.parse(rawValue) as Partial<PersistedLeadFilters>
+    const parsed = JSON.parse(rawValue) as Partial<PersistedLeadFilters & {
+      // Legacy single-string fields kept here only so coerceToArray sees them
+      // when migrating an old localStorage entry.
+      city?: unknown; disposition?: unknown; owner?: unknown; source?: unknown; followUp?: unknown
+    }>
     return {
-      city: parsed.city || 'All',
-      disposition: parsed.disposition || 'All',
-      owner: parsed.owner || 'All',
+      city: coerceToArray(parsed.city),
+      disposition: coerceToArray(parsed.disposition),
+      owner: coerceToArray(parsed.owner),
       paginationMode: parsed.paginationMode === 'off' ? 'off' : 'on',
-      search: parsed.search || '',
-      source: parsed.source || 'All',
+      search: typeof parsed.search === 'string' ? parsed.search : '',
+      source: coerceToArray(parsed.source),
+      followUp: coerceToArray(parsed.followUp),
       dateRange: parsed.dateRange || { from: null, to: null },
     }
   } catch {
-    return {
-      city: 'All',
-      disposition: 'All',
-      owner: 'All',
-      paginationMode: 'on',
-      search: '',
-      source: 'All',
-      dateRange: { from: null, to: null },
-    }
+    return emptyPersistedFilters()
   }
 }
 
@@ -159,11 +157,11 @@ export default function LeadList() {
     if (!snap) return null
     const expected = JSON.stringify({
       search: persistedFilters.search.trim(),
-      filterDisposition: persistedFilters.disposition,
-      filterSource: persistedFilters.source,
-      filterCity: persistedFilters.city,
-      filterOwner: persistedFilters.owner,
-      filterFollowUp: 'All',
+      filterDisposition: [...persistedFilters.disposition].sort(),
+      filterSource: [...persistedFilters.source].sort(),
+      filterCity: [...persistedFilters.city].sort(),
+      filterOwner: [...persistedFilters.owner].sort(),
+      filterFollowUp: [...persistedFilters.followUp].sort(),
       showMyLeadsOnly: false,
       paginationMode: persistedFilters.paginationMode,
       dateFrom: persistedFilters.dateRange.from,
@@ -180,15 +178,18 @@ export default function LeadList() {
   const [ownershipToast, setOwnershipToast] = useState(false)
 
   const [search, setSearch] = useState(persistedFilters.search)
-  const [filterDisposition, setFilterDisposition] = useState<string>(persistedFilters.disposition)
-  const [filterSource, setFilterSource] = useState<string>(persistedFilters.source)
-  const [filterCity, setFilterCity] = useState<string>(persistedFilters.city)
-  const [filterOwner, setFilterOwner] = useState<string>(persistedFilters.owner)
-  // Follow-up filter: 'All' shows everything; 'with' shows leads that have a scheduled follow-up;
-  // 'without' shows leads missing one (NA); 'overdue' shows leads whose next follow-up has passed.
-  // Terminal dispositions (Failed, Booking Done, Agreement Done) are never counted as
-  // missing — they don't need ongoing follow-ups.
-  const [filterFollowUp, setFilterFollowUp] = useState<string>('All')
+  // Each filter is an array — empty array == "All". A single value is treated
+  // identically to the old single-select behaviour by both the panel and the
+  // backend; multiple values are sent as a comma-separated string.
+  const [filterDisposition, setFilterDisposition] = useState<string[]>(persistedFilters.disposition)
+  const [filterSource, setFilterSource] = useState<string[]>(persistedFilters.source)
+  const [filterCity, setFilterCity] = useState<string[]>(persistedFilters.city)
+  const [filterOwner, setFilterOwner] = useState<string[]>(persistedFilters.owner)
+  // Follow-up filter buckets: 'with', 'without', 'overdue', 'today',
+  // 'tomorrow', 'thisweek'. Multi-select OR-combines them server-side.
+  // Terminal dispositions (Failed, Booking Done, Agreement Done) are never
+  // counted as missing — they don't need ongoing follow-ups.
+  const [filterFollowUp, setFilterFollowUp] = useState<string[]>(persistedFilters.followUp)
   // Per-bucket counts for the follow-up filter dropdown (shown as inline badges).
   // Refreshed alongside the leads list so the numbers stay in sync with edits.
   const [followUpCounts, setFollowUpCounts] = useState<{
@@ -292,22 +293,21 @@ export default function LeadList() {
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    window.localStorage.setItem(
-      LEAD_LIST_FILTERS_STORAGE_KEY,
-      JSON.stringify({
-        city: filterCity,
-        disposition: filterDisposition,
-        owner: filterOwner,
-        paginationMode,
-        search,
-        source: filterSource,
-        dateRange: {
-          from: dateRange.from ? dateRange.from.toISOString() : null,
-          to: dateRange.to ? dateRange.to.toISOString() : null,
-        },
-      })
-    )
-  }, [filterCity, filterDisposition, filterOwner, filterSource, paginationMode, search, dateRange])
+    const payload: PersistedLeadFilters = {
+      city: filterCity,
+      disposition: filterDisposition,
+      owner: filterOwner,
+      paginationMode,
+      search,
+      source: filterSource,
+      followUp: filterFollowUp,
+      dateRange: {
+        from: dateRange.from ? dateRange.from.toISOString() : null,
+        to: dateRange.to ? dateRange.to.toISOString() : null,
+      },
+    }
+    window.localStorage.setItem(LEAD_LIST_FILTERS_STORAGE_KEY, JSON.stringify(payload))
+  }, [filterCity, filterDisposition, filterOwner, filterSource, filterFollowUp, paginationMode, search, dateRange])
 
   useEffect(() => {
     const handleLeadFieldsUpdated = () => {
@@ -359,12 +359,14 @@ export default function LeadList() {
       const params: Record<string, string> = { page: String(page), limit: '30' }
 
       if (search.trim()) params.search = search.trim()
-      if (filterDisposition !== 'All') params.disposition = filterDisposition
-      if (filterSource !== 'All') params.source = filterSource
-      if (filterCity !== 'All') params.city = filterCity
-      if (isManager && filterOwner !== 'All') params.owner = filterOwner
-      if (filterFollowUp !== 'All') params.followUp = filterFollowUp
-      // Reps see all leads by default; when "My Leads" mode is on, filter to their own
+      // Multi-select filters get joined with commas; backend splits the same way.
+      if (filterDisposition.length > 0) params.disposition = filterDisposition.join(',')
+      if (filterSource.length > 0) params.source = filterSource.join(',')
+      if (filterCity.length > 0) params.city = filterCity.join(',')
+      if (isManager && filterOwner.length > 0) params.owner = filterOwner.join(',')
+      if (filterFollowUp.length > 0) params.followUp = filterFollowUp.join(',')
+      // Reps see all leads by default; when "My Leads" mode is on, filter to their own.
+      // Overrides any owner filter above (reps don't see the owner picker anyway).
       if (!isManager && showMyLeadsOnly && user?.id) params.owner = user.id
 
       if (dateRange.from) {
@@ -399,11 +401,13 @@ export default function LeadList() {
     () =>
       JSON.stringify({
         search: search.trim(),
-        filterDisposition,
-        filterSource,
-        filterCity,
-        filterOwner,
-        filterFollowUp,
+        // Sort the array filters so [A,B] and [B,A] produce the same signature
+        // (selection order doesn't change the result set).
+        filterDisposition: [...filterDisposition].sort(),
+        filterSource: [...filterSource].sort(),
+        filterCity: [...filterCity].sort(),
+        filterOwner: [...filterOwner].sort(),
+        filterFollowUp: [...filterFollowUp].sort(),
         showMyLeadsOnly,
         paginationMode,
         dateFrom: dateRange.from ? dateRange.from.toISOString() : null,
@@ -615,10 +619,11 @@ export default function LeadList() {
 
   // Keep the follow-up bucket counts in sync with any filter / search change
   // that could alter which leads are visible. Scopes by the currently-selected
-  // Owner filter when set (so a manager drilling into one rep sees their
-  // counts only).
+  // Owner filter when set (so a manager drilling into specific reps sees only
+  // their counts). Multi-select uses the same comma-joined format the
+  // backend now understands.
   useEffect(() => {
-    const ownerScope = isManager && filterOwner !== 'All' ? filterOwner : undefined
+    const ownerScope = isManager && filterOwner.length > 0 ? filterOwner.join(',') : undefined
     leadsAPI
       .getFollowUpCounts(ownerScope)
       .then((res) => {
@@ -787,18 +792,20 @@ export default function LeadList() {
 
   const hasFilters =
     Boolean(search.trim()) ||
-    filterDisposition !== 'All' ||
-    filterSource !== 'All' ||
-    filterCity !== 'All' ||
-    (isManager && filterOwner !== 'All') ||
+    filterDisposition.length > 0 ||
+    filterSource.length > 0 ||
+    filterCity.length > 0 ||
+    filterFollowUp.length > 0 ||
+    (isManager && filterOwner.length > 0) ||
     (!isManager && showMyLeadsOnly) ||
     Boolean(dateRange.from || dateRange.to)
 
   const clearFilters = () => {
-    setFilterDisposition('All')
-    setFilterSource('All')
-    setFilterCity('All')
-    setFilterOwner('All')
+    setFilterDisposition([])
+    setFilterSource([])
+    setFilterCity([])
+    setFilterOwner([])
+    setFilterFollowUp([])
     setSearch('')
     setDateRange({ from: null, to: null })
     if (!isManager) setShowMyLeadsOnly(false)
@@ -1330,7 +1337,7 @@ export default function LeadList() {
             <h1 className="text-base font-bold text-[#0F172A]">Leads</h1>
             <p className="text-xs text-[#475569] mt-0.5">
               {pagination.total} leads
-              {isManager && filterOwner === 'unassigned' ? ' awaiting assignment' : ''}
+              {isManager && filterOwner.length === 1 && filterOwner[0] === 'unassigned' ? ' awaiting assignment' : ''}
             </p>
           </div>
 
@@ -1452,50 +1459,53 @@ export default function LeadList() {
             />
           </div>
 
-          <FancyDropdown
-            value={filterDisposition}
+          <FancyMultiSelect
+            values={filterDisposition}
             onChange={setFilterDisposition}
-            options={dispositionOptions}
+            options={dispositionOptions.filter((opt) => opt.value !== 'All')}
             placeholder="Disposition"
+            minWidth={70}
+            panelWidth={220}
+          />
+
+          <FancyMultiSelect
+            values={filterSource}
+            onChange={setFilterSource}
+            options={sourceOptions.filter((opt) => opt.value !== 'All')}
+            placeholder="Source"
             minWidth={70}
             panelWidth={200}
           />
 
-          <FancyDropdown
-            value={filterSource}
-            onChange={setFilterSource}
-            options={sourceOptions}
-            placeholder="Source"
-            minWidth={70}
-            panelWidth={180}
-          />
-
-          <FancyDropdown
-            value={filterCity}
+          <FancyMultiSelect
+            values={filterCity}
             onChange={setFilterCity}
-            options={cityOptions}
+            options={cityOptions.filter((opt) => opt.value !== 'All')}
             placeholder="City"
             minWidth={70}
-            panelWidth={180}
+            panelWidth={200}
+            // Cities can be a long curated list — Select-all is rarely useful here.
+            hideSelectAll
           />
 
-          <FancyDropdown
-            value={filterFollowUp}
+          <FancyMultiSelect
+            values={filterFollowUp}
             onChange={setFilterFollowUp}
-            options={followUpOptions}
+            options={followUpOptions.filter((opt) => opt.value !== 'All')}
             placeholder="Follow-up"
             minWidth={90}
-            panelWidth={240}
+            panelWidth={260}
           />
 
           {isManager ? (
-            <FancyDropdown
-              value={filterOwner}
+            <FancyMultiSelect
+              values={filterOwner}
               onChange={setFilterOwner}
-              options={ownerOptions}
+              options={ownerOptions.filter((opt) => opt.value !== 'All')}
               placeholder="Owner"
               minWidth={70}
-              panelWidth={200}
+              panelWidth={220}
+              hideSelectAll
             />
           ) : (
             <button
@@ -1664,7 +1674,7 @@ export default function LeadList() {
 
       {showExportModal && isManager ? (
         <ExportLeadsModal
-          initialOwner={filterOwner}
+          initialOwner={filterOwner.length === 1 ? filterOwner[0] : 'All'}
           onClose={() => setShowExportModal(false)}
           owners={owners}
         />
