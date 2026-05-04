@@ -8,7 +8,8 @@ export type LeadColumnKey =
   | 'owner'
   | 'disposition'
   | 'followup'
-  | 'date'
+  | 'createdAt'
+  | 'updatedAt'
   | 'actions'
 
 export type LeadColumnConfig = {
@@ -23,7 +24,8 @@ export const LEAD_COLUMN_LABELS: Record<LeadColumnKey, string> = {
   owner: 'Owner',
   disposition: 'Disposition',
   followup: 'Follow Up',
-  date: 'Date',
+  createdAt: 'Created',
+  updatedAt: 'Last Edit',
   actions: 'Actions',
 }
 
@@ -34,31 +36,44 @@ export const DEFAULT_LEAD_COLUMNS: LeadColumnConfig[] = [
   { key: 'owner', visible: true },
   { key: 'disposition', visible: true },
   { key: 'followup', visible: true },
-  { key: 'date', visible: true },
+  { key: 'createdAt', visible: true },
+  { key: 'updatedAt', visible: true },
   { key: 'actions', visible: true },
 ]
 
 const STORAGE_KEY = 'buildflow:lead-list-columns'
+// Legacy key set previous releases stored. Used only for migration.
+type LegacyLeadColumnKey = LeadColumnKey | 'date'
 
 export function loadLeadColumnConfig(): LeadColumnConfig[] {
   if (typeof window === 'undefined') return DEFAULT_LEAD_COLUMNS
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     if (!raw) return DEFAULT_LEAD_COLUMNS
-    const parsed = JSON.parse(raw) as LeadColumnConfig[]
+    const parsed = JSON.parse(raw) as Array<{ key: LegacyLeadColumnKey; visible: boolean }>
     if (!Array.isArray(parsed)) return DEFAULT_LEAD_COLUMNS
+
+    // Migration: prior releases shipped a single 'date' column with a toggle
+    // between Created / Last Edit. Expand it in place to two columns so the
+    // user keeps their position + visibility preference, just split.
+    const expanded: LeadColumnConfig[] = []
+    for (const c of parsed) {
+      if ((c.key as string) === 'date') {
+        expanded.push({ key: 'createdAt', visible: c.visible })
+        expanded.push({ key: 'updatedAt', visible: c.visible })
+      } else if ((DEFAULT_LEAD_COLUMNS as LeadColumnConfig[]).some((d) => d.key === c.key)) {
+        expanded.push({ key: c.key as LeadColumnKey, visible: c.visible })
+      }
+    }
 
     // Merge with defaults so any column the user hasn't seen yet (e.g. newly
     // added in a future release) is appended in its default position rather
     // than silently lost.
-    const known = new Set(parsed.map((c) => c.key))
-    const merged: LeadColumnConfig[] = parsed.filter((c) =>
-      (DEFAULT_LEAD_COLUMNS as LeadColumnConfig[]).some((d) => d.key === c.key)
-    )
+    const known = new Set(expanded.map((c) => c.key))
     for (const def of DEFAULT_LEAD_COLUMNS) {
-      if (!known.has(def.key)) merged.push({ ...def })
+      if (!known.has(def.key)) expanded.push({ ...def })
     }
-    return merged
+    return expanded
   } catch {
     return DEFAULT_LEAD_COLUMNS
   }

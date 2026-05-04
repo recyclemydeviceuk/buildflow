@@ -15,6 +15,7 @@ import RepresentativePicker, { type RepresentativePickerOption } from '../compon
 import LeadColumnManager, {
   loadLeadColumnConfig,
   saveLeadColumnConfig,
+  LEAD_COLUMN_LABELS,
   type LeadColumnConfig,
   type LeadColumnKey,
 } from '../components/leads/LeadColumnManager'
@@ -216,9 +217,9 @@ export default function LeadList() {
   const [createdAtDraft, setCreatedAtDraft] = useState('')
   const [createdAtEditorVersion, setCreatedAtEditorVersion] = useState(0)
   const [savingCreatedAtLeadId, setSavingCreatedAtLeadId] = useState<string | null>(null)
+  // Which timestamp the date-range filter applies to. The two date columns
+  // render independently of this — it only scopes the filter.
   const [dateMode, setDateMode] = useState<'updatedAt' | 'createdAt'>('updatedAt')
-  const [dateModeDropdownOpen, setDateModeDropdownOpen] = useState(false)
-  const dateModeDropdownRef = useRef<HTMLDivElement>(null)
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [bulkUpdating, setBulkUpdating] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -641,16 +642,6 @@ export default function LeadList() {
     return () => container.removeEventListener('scroll', onScroll)
   }, [paginationMode, handleScroll])
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dateModeDropdownRef.current && !dateModeDropdownRef.current.contains(e.target as Node)) {
-        setDateModeDropdownOpen(false)
-      }
-    }
-    if (dateModeDropdownOpen) document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [dateModeDropdownOpen])
-
   const fetchFilters = async () => {
     try {
       const res = await leadsAPI.getLeadFilters()
@@ -1029,64 +1020,38 @@ export default function LeadList() {
   // by these two helpers. The order + visibility come from columnConfig, which
   // the user can customize via the LeadColumnManager popover above the table.
   const renderColumnHeader = (key: LeadColumnKey) => {
-    if (key === 'date') {
+    if (key === 'createdAt' || key === 'updatedAt') {
+      const Icon = key === 'createdAt' ? CalendarDays : Clock
+      const label = key === 'createdAt' ? 'Created' : 'Last Edit'
+      const isDateFilterTarget = dateMode === key && (dateRange.from || dateRange.to)
       return (
         <th key={key} className="px-3 py-2.5 text-left text-[9px] font-bold text-[#94A3B8] uppercase tracking-wider whitespace-nowrap">
           <div className="flex items-center gap-1.5">
-            <div ref={dateModeDropdownRef} className="relative">
+            <Icon size={10} className={isDateFilterTarget ? 'text-[#1D4ED8]' : 'opacity-60'} />
+            <span className={isDateFilterTarget ? 'text-[#1D4ED8]' : ''}>{label}</span>
+            {/* Visual cue when this column is the one the date-range filter
+                is currently scoping. Click to swap which timestamp the
+                filter applies to without leaving the table. */}
+            {(dateRange.from || dateRange.to) ? (
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); setDateModeDropdownOpen((o) => !o) }}
-                className="flex items-center gap-1 px-2 py-1 rounded-md bg-[#EFF6FF] border border-[#BFDBFE] text-[#1D4ED8] text-[9px] font-bold uppercase tracking-wider hover:bg-[#DBEAFE] transition-colors"
+                onClick={(e) => { e.stopPropagation(); setDateMode(key) }}
+                title={isDateFilterTarget ? 'Date filter applies to this column' : `Filter date range by ${label}`}
+                className={`ml-0.5 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full transition-colors ${
+                  isDateFilterTarget
+                    ? 'bg-[#1D4ED8] text-white'
+                    : 'bg-[#F1F5F9] text-[#94A3B8] hover:bg-[#E2E8F0]'
+                }`}
               >
-                {dateMode === 'updatedAt'
-                  ? <><Clock size={9} className="shrink-0" /> Last Edit</>
-                  : <><CalendarDays size={9} className="shrink-0" /> Created At</>
-                }
-                <ChevronDown size={9} className={`shrink-0 transition-transform duration-150 ${dateModeDropdownOpen ? 'rotate-180' : ''}`} />
+                <span className="text-[7px] font-extrabold leading-none">
+                  {isDateFilterTarget ? '•' : '+'}
+                </span>
               </button>
-              {dateModeDropdownOpen && (
-                <div className="absolute top-full left-0 mt-1.5 w-36 bg-white border border-[#E2E8F0] rounded-xl shadow-lg z-50 overflow-hidden">
-                  <div className="px-2.5 py-1.5 border-b border-[#F1F5F9]">
-                    <p className="text-[8px] font-bold text-[#94A3B8] uppercase tracking-wider">Show date</p>
-                  </div>
-                  <div className="p-1">
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setDateMode('updatedAt'); setDateModeDropdownOpen(false) }}
-                      className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[10px] font-semibold transition-colors ${dateMode === 'updatedAt' ? 'bg-[#EFF6FF] text-[#1D4ED8]' : 'text-[#475569] hover:bg-[#F8FAFC]'}`}
-                    >
-                      <Clock size={11} className="shrink-0" />
-                      Last Edit
-                      {dateMode === 'updatedAt' && (<span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#1D4ED8]" />)}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setDateMode('createdAt'); setDateModeDropdownOpen(false) }}
-                      className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[10px] font-semibold transition-colors ${dateMode === 'createdAt' ? 'bg-[#EFF6FF] text-[#1D4ED8]' : 'text-[#475569] hover:bg-[#F8FAFC]'}`}
-                    >
-                      <CalendarDays size={11} className="shrink-0" />
-                      Created At
-                      {dateMode === 'createdAt' && (<span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#1D4ED8]" />)}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-            <ArrowUpDown size={10} className="opacity-50" />
+            ) : null}
+            <ArrowUpDown size={10} className="opacity-50 ml-auto" />
           </div>
         </th>
       )
-    }
-    const labels: Record<LeadColumnKey, string> = {
-      lead: 'Lead',
-      source: 'Source',
-      city: 'City',
-      owner: 'Owner',
-      disposition: 'Disposition',
-      followup: 'Follow Up',
-      date: 'Date',
-      actions: 'Actions',
     }
     return (
       <th key={key} className="px-3 py-2.5 text-left text-[9px] font-bold text-[#94A3B8] uppercase tracking-wider whitespace-nowrap">
@@ -1094,7 +1059,7 @@ export default function LeadList() {
           'Actions'
         ) : (
           <div className="flex items-center gap-1">
-            {labels[key]} <ArrowUpDown size={10} className="opacity-50" />
+            {LEAD_COLUMN_LABELS[key]} <ArrowUpDown size={10} className="opacity-50" />
           </div>
         )}
       </th>
@@ -1212,7 +1177,7 @@ export default function LeadList() {
           </td>
         )
       }
-      case 'date':
+      case 'createdAt':
         return (
           <td key={key} className="px-3 py-2.5" onClick={(event) => event.stopPropagation()}>
             {editingCreatedAtLeadId === lead._id ? (
@@ -1252,17 +1217,14 @@ export default function LeadList() {
             ) : (
               <div className="flex flex-col gap-1">
                 <div className="flex flex-col">
-                  {dateMode === 'updatedAt' && (
-                    <span className="text-[8px] font-semibold text-[#94A3B8] uppercase tracking-wide mb-0.5">Last Edit</span>
-                  )}
                   <span className="text-[10px] font-medium text-[#475569] whitespace-nowrap">
-                    {new Date(dateMode === 'updatedAt' ? lead.updatedAt : lead.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    {new Date(lead.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </span>
                   <span className="text-[9px] text-[#94A3B8] whitespace-nowrap">
-                    {new Date(dateMode === 'updatedAt' ? lead.updatedAt : lead.createdAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
+                    {new Date(lead.createdAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
                   </span>
                 </div>
-                {canEditCreatedAt && dateMode === 'createdAt' ? (
+                {canEditCreatedAt ? (
                   <button
                     type="button"
                     onClick={() => startEditingCreatedAt(lead)}
@@ -1273,6 +1235,19 @@ export default function LeadList() {
                 ) : null}
               </div>
             )}
+          </td>
+        )
+      case 'updatedAt':
+        return (
+          <td key={key} className="px-3 py-2.5">
+            <div className="flex flex-col">
+              <span className="text-[10px] font-medium text-[#475569] whitespace-nowrap">
+                {new Date(lead.updatedAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </span>
+              <span className="text-[9px] text-[#94A3B8] whitespace-nowrap">
+                {new Date(lead.updatedAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
+              </span>
+            </div>
           </td>
         )
       case 'actions':
@@ -1527,6 +1502,42 @@ export default function LeadList() {
             placeholder="Date"
             className="min-w-[70px]"
           />
+
+          {/* When a date range is active, surface which timestamp it filters
+              against. The two-button toggle mirrors the column headers — the
+              column the filter is currently scoping shows a blue dot. Hidden
+              while no range is set so the toolbar stays compact. */}
+          {(dateRange.from || dateRange.to) ? (
+            <div
+              className="inline-flex items-center h-7 rounded-md border border-[#E2E8F0] bg-white p-0.5 text-[10px] font-bold"
+              title="Which timestamp the date range filters by"
+            >
+              <button
+                type="button"
+                onClick={() => setDateMode('createdAt')}
+                className={`inline-flex items-center gap-1 h-6 px-2 rounded transition-colors ${
+                  dateMode === 'createdAt'
+                    ? 'bg-[#EFF6FF] text-[#1D4ED8]'
+                    : 'text-[#64748B] hover:text-[#0F172A]'
+                }`}
+              >
+                <CalendarDays size={10} />
+                Created
+              </button>
+              <button
+                type="button"
+                onClick={() => setDateMode('updatedAt')}
+                className={`inline-flex items-center gap-1 h-6 px-2 rounded transition-colors ${
+                  dateMode === 'updatedAt'
+                    ? 'bg-[#EFF6FF] text-[#1D4ED8]'
+                    : 'text-[#64748B] hover:text-[#0F172A]'
+                }`}
+              >
+                <Clock size={10} />
+                Edited
+              </button>
+            </div>
+          ) : null}
 
           {hasFilters ? (
             <button
