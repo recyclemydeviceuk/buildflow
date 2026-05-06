@@ -692,6 +692,9 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
       // button can return to /leads/failed when the user came from there
       // (instead of dumping them onto My Leads, where the lead they just
       // closed wouldn't even be visible because Failed leads are excluded).
+      // Also mirror it into sessionStorage so a hard-refresh of the detail
+      // page doesn't lose the source — router state evaporates on reload.
+      try { window.sessionStorage.setItem('buildflow:lead-detail-source', location.pathname) } catch { /* ignore */ }
       navigate(`/leads/${leadId}`, { state: { from: location.pathname } })
     },
     [mode, filtersSignature, paginationMode, leads, pagination, infiniteLeads, infinitePage, hasMore, navigate, location.pathname]

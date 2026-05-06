@@ -129,15 +129,20 @@ export default function LeadDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
-  // Where the user came from. Set by LeadList.navigateToLead via router state
-  // so the back button (and other "go back" paths after destructive actions)
-  // returns to the right list — /leads/failed should send them back to
-  // /leads/failed, not the default /leads. Falls back when the user opened
-  // this page via a deep link / fresh tab.
-  const backTo: string =
-    typeof (location.state as { from?: unknown } | null)?.from === 'string'
-      ? ((location.state as { from: string }).from)
-      : '/leads'
+  // Where the user came from. Set by LeadList.navigateToLead via router
+  // state, with a sessionStorage mirror that survives a hard refresh of the
+  // detail page. We only honor /leads* paths to avoid being tricked into
+  // navigating outside the leads area. Falls back to /leads for deep-linked
+  // visits and fresh tabs.
+  const backTo: string = (() => {
+    const stateFrom = (location.state as { from?: unknown } | null)?.from
+    if (typeof stateFrom === 'string' && stateFrom.startsWith('/leads')) return stateFrom
+    try {
+      const stored = window.sessionStorage.getItem('buildflow:lead-detail-source')
+      if (stored && stored.startsWith('/leads')) return stored
+    } catch { /* ignore */ }
+    return '/leads'
+  })()
   const { user } = useAuth()
   const { socket, connected } = useSocket()
   // Whether this user type ever needs the representative list (for picker & "Calling As" selector)
