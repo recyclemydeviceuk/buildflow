@@ -98,7 +98,9 @@ const coerceToArray = (raw: unknown): string[] => {
 
 // Module-level snapshot — survives unmount when the user navigates into a lead
 // detail page so we can restore scroll position + already-loaded leads when
-// they come back. Cleared on hydrate so it doesn't leak into unrelated visits.
+// they come back. Persisted to sessionStorage (per-mode) so it survives HMR,
+// hard refreshes, and React.StrictMode's dev-only double-mount that used to
+// nuke the previous module-level cache on the second mount.
 type LeadListNavigationSnapshot = {
   signature: string
   paginationMode: 'on' | 'off'
@@ -110,8 +112,44 @@ type LeadListNavigationSnapshot = {
   innerScrollTop: number
   mainScrollTop: number
   windowScrollY: number
+  /** Wall-clock when the snapshot was last touched. Used to expire stale ones. */
+  ts: number
 }
-let leadListNavigationSnapshot: LeadListNavigationSnapshot | null = null
+
+const SNAPSHOT_TTL_MS = 30 * 60 * 1000 // 30 minutes — long enough for a quick detour, short enough that re-opening the app a day later starts clean
+const snapshotKey = (mode: LeadListMode) =>
+  mode === 'failed' ? 'buildflow:lead-list-snapshot:failed' : 'buildflow:lead-list-snapshot'
+
+const readLeadListSnapshot = (mode: LeadListMode): LeadListNavigationSnapshot | null => {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.sessionStorage.getItem(snapshotKey(mode))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as LeadListNavigationSnapshot
+    if (!parsed || typeof parsed !== 'object') return null
+    if (typeof parsed.ts !== 'number' || Date.now() - parsed.ts > SNAPSHOT_TTL_MS) {
+      window.sessionStorage.removeItem(snapshotKey(mode))
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+const writeLeadListSnapshot = (mode: LeadListMode, snapshot: LeadListNavigationSnapshot) => {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.setItem(snapshotKey(mode), JSON.stringify(snapshot))
+  } catch {
+    // QuotaExceeded etc — silently drop, scroll restoration is non-critical.
+  }
+}
+
+const clearLeadListSnapshot = (mode: LeadListMode) => {
+  if (typeof window === 'undefined') return
+  try { window.sessionStorage.removeItem(snapshotKey(mode)) } catch { /* ignore */ }
+}
 
 // The actual scroll container can be either the inner table wrapper or the
 // outer <main> element from Layout.tsx (depending on viewport / sticky banner
@@ -193,10 +231,21 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
   // FIRST render already contains the saved leads, and useLayoutEffect can
   // restore scroll position before the browser paints. This is the only way
   // to avoid a "flash of top of list" on return.
-  const [navSnapshot] = useState<LeadListNavigationSnapshot | null>(() => {
-    const snap = leadListNavigationSnapshot
-    leadListNavigationSnapshot = null
-    if (!snap) return null
+  // Read once on first render. The result is a 2-tuple:
+  //  - navSnapshot:        full snapshot when filters still match (lets us
+  //                        seed leads + restore scroll synchronously).
+  //  - scrollOnlySnapshot: just the saved scroll positions, for the case
+  //                        where filters changed between leaving and coming
+  //                        back. We can't reuse the cached leads then, but
+  //                        we can still nudge the user back to roughly where
+  //                        they were once the fresh fetch lands.
+  type ScrollOnly = Pick<LeadListNavigationSnapshot, 'innerScrollTop' | 'mainScrollTop' | 'windowScrollY'>
+  const [restorePair] = useState<{
+    full: LeadListNavigationSnapshot | null
+    scrollOnly: ScrollOnly | null
+  }>(() => {
+    const snap = readLeadListSnapshot(mode)
+    if (!snap) return { full: null, scrollOnly: null }
     const expected = JSON.stringify({
       mode,
       search: persistedFilters.search.trim(),
@@ -212,8 +261,18 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
       dateTo: persistedFilters.dateRange.to,
       dateMode: 'updatedAt',
     })
-    return snap.signature === expected ? snap : null
+    if (snap.signature === expected) return { full: snap, scrollOnly: null }
+    return {
+      full: null,
+      scrollOnly: {
+        innerScrollTop: snap.innerScrollTop,
+        mainScrollTop: snap.mainScrollTop,
+        windowScrollY: snap.windowScrollY,
+      },
+    }
   })
+  const navSnapshot = restorePair.full
+  const scrollOnlySnapshot = restorePair.scrollOnly
 
   const [leads, setLeads] = useState<Lead[]>(() =>
     navSnapshot && navSnapshot.paginationMode === 'on' ? navSnapshot.paginatedLeads : []
@@ -514,13 +573,108 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
     }))
   }, [navSnapshot])
 
+  // Best-effort fallback: filters changed between leaving and coming back so
+  // we couldn't reuse the cached leads, but we still have the saved scroll
+  // position. Apply it once the fresh fetch lands. We watch `loading` going
+  // false and the leads array having content as the signal that the page is
+  // ready to be scrolled.
+  useEffect(() => {
+    if (scrollRestoredRef.current) return
+    if (!scrollOnlySnapshot) return
+    if (loading) return
+    const visibleCount = paginationMode === 'on' ? leads.length : infiniteLeads.length
+    if (visibleCount === 0) {
+      scrollRestoredRef.current = true
+      return
+    }
+    const container = scrollContainerRef.current
+    if (!container) return
+    const mainEl = findMainAncestor(container)
+    const apply = () => {
+      const inner = scrollContainerRef.current
+      if (inner) {
+        inner.scrollTop = Math.min(scrollOnlySnapshot.innerScrollTop, inner.scrollHeight - inner.clientHeight)
+      }
+      if (mainEl) {
+        mainEl.scrollTop = Math.min(scrollOnlySnapshot.mainScrollTop, mainEl.scrollHeight - mainEl.clientHeight)
+      }
+      if (scrollOnlySnapshot.windowScrollY > 0) {
+        window.scrollTo(0, scrollOnlySnapshot.windowScrollY)
+      }
+    }
+    apply()
+    requestAnimationFrame(apply)
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      apply()
+      scrollRestoredRef.current = true
+    }))
+  }, [scrollOnlySnapshot, loading, leads, infiniteLeads, paginationMode])
+
+  // Whenever leads land or the filter set changes, lay down a base snapshot
+  // so the scroll listener has something to update. Also keeps the snapshot
+  // signature in sync so coming back finds a valid match.
+  useEffect(() => {
+    if (loading) return
+    const visibleCount = paginationMode === 'on' ? leads.length : infiniteLeads.length
+    if (visibleCount === 0) return
+    const inner = scrollContainerRef.current
+    const mainEl = findMainAncestor(inner)
+    writeLeadListSnapshot(mode, {
+      signature: filtersSignature,
+      paginationMode,
+      paginatedLeads: leads,
+      pagination,
+      infiniteLeads,
+      infinitePage,
+      hasMore,
+      innerScrollTop: inner?.scrollTop ?? 0,
+      mainScrollTop: mainEl?.scrollTop ?? 0,
+      windowScrollY: typeof window !== 'undefined' ? window.scrollY : 0,
+      ts: Date.now(),
+    })
+  }, [mode, filtersSignature, paginationMode, leads, pagination, infiniteLeads, infinitePage, hasMore, loading])
+
+  // Continuously refresh the snapshot's scroll position on every scroll event
+  // (rAF-throttled). Without this the saved scroll would only update when the
+  // user clicks through navigateToLead — so navigating away via a sidebar
+  // link, browser forward/back, or any other route change would persist a
+  // stale position.
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+    let rafPending = false
+    const onScroll = () => {
+      if (rafPending) return
+      rafPending = true
+      requestAnimationFrame(() => {
+        rafPending = false
+        const inner = scrollContainerRef.current
+        if (!inner) return
+        const mainEl = findMainAncestor(inner)
+        const existing = readLeadListSnapshot(mode)
+        if (!existing) return
+        writeLeadListSnapshot(mode, {
+          ...existing,
+          innerScrollTop: inner.scrollTop,
+          mainScrollTop: mainEl?.scrollTop ?? 0,
+          windowScrollY: window.scrollY,
+          ts: Date.now(),
+        })
+      })
+    }
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => container.removeEventListener('scroll', onScroll)
+    // Re-bind whenever a fresh container mounts (e.g. on filter-driven
+    // re-renders that swap the scroll container) so we keep tracking.
+  }, [mode, leads, infiniteLeads])
+
   // Wrap navigation into a lead detail so we always capture the snapshot
   // (scroll position + already-loaded leads) before unmounting.
   const navigateToLead = useCallback(
     (leadId: string) => {
       const inner = scrollContainerRef.current
       const mainEl = findMainAncestor(inner)
-      leadListNavigationSnapshot = {
+      writeLeadListSnapshot(mode, {
         signature: filtersSignature,
         paginationMode,
         paginatedLeads: leads,
@@ -531,10 +685,11 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
         innerScrollTop: inner?.scrollTop ?? 0,
         mainScrollTop: mainEl?.scrollTop ?? 0,
         windowScrollY: typeof window !== 'undefined' ? window.scrollY : 0,
-      }
+        ts: Date.now(),
+      })
       navigate(`/leads/${leadId}`)
     },
-    [filtersSignature, paginationMode, leads, pagination, infiniteLeads, infinitePage, hasMore, navigate]
+    [mode, filtersSignature, paginationMode, leads, pagination, infiniteLeads, infinitePage, hasMore, navigate]
   )
 
   const fetchLeads = useCallback(
@@ -861,6 +1016,9 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
     setSearch('')
     setDateRange({ from: null, to: null })
     if (!isManager) setShowMyLeadsOnly(false)
+    // Wipe the cached scroll snapshot — its leads cache is now invalid and we
+    // want the user to land at the top of the freshly-filtered list anyway.
+    clearLeadListSnapshot(mode)
   }
 
   const handleRefresh = async () => {
