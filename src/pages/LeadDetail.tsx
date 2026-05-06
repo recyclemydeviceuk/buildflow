@@ -1362,7 +1362,7 @@ export default function LeadDetail() {
                                 {/* Source list mirrors FAILED_REASONS in LeadList so the
                                     Failed Leads filter and the LeadDetail picker can never
                                     drift out of sync. */}
-                                {['RNR', 'Not Responding', 'Not Interested', 'Budget Issue', 'Location Issue', 'Timeline Issue', 'Competition', 'Not Enquired', 'Invalid Number', 'Other'].map((r) => (
+                                {['RNR', 'Not Responding', 'Not Interested', 'Budget Issue', 'Location Issue', 'Timeline Issue', 'Competition', 'Not Enquired', 'Invalid Number', 'Looking for constructed house', 'Looking for plot', 'Other'].map((r) => (
                                   <option key={r} value={r}>{r}</option>
                                 ))}
                               </select>

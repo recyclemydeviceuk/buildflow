@@ -58,7 +58,9 @@ export type LeadListMode = 'active' | 'failed'
 
 // Curated failed-reason list used both as the LeadDetail dropdown source AND
 // the Failed Leads filter options. RNR (Ring No Response) was added so reps
-// can extract every unanswered number for re-targeting.
+// can extract every unanswered number for re-targeting. The "Looking for…"
+// pair captures leads that aren't a fit for BuildFlow's construction service
+// because they're after a finished home or a plot instead.
 export const FAILED_REASONS = [
   'RNR',
   'Not Responding',
@@ -69,6 +71,8 @@ export const FAILED_REASONS = [
   'Competition',
   'Not Enquired',
   'Invalid Number',
+  'Looking for constructed house',
+  'Looking for plot',
   'Other',
 ] as const
 
