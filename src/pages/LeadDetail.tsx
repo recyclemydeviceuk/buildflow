@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
   ArrowLeft, Phone, PhoneOff, PhoneCall, MapPin, Building2,
   IndianRupee, CheckCircle2, CheckCircle, Mic, ChevronDown, Edit3, User, Delete, Pencil, Trash2, X, History, MessageSquare, Clock, Calendar, ArrowUpRight, ArrowDownLeft, AlertCircle, Voicemail, Mail, Lock, Video, XCircle
@@ -128,6 +128,16 @@ const outcomeConfig: Record<string, { icon: typeof CheckCircle2 }> = {
 export default function LeadDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  // Where the user came from. Set by LeadList.navigateToLead via router state
+  // so the back button (and other "go back" paths after destructive actions)
+  // returns to the right list — /leads/failed should send them back to
+  // /leads/failed, not the default /leads. Falls back when the user opened
+  // this page via a deep link / fresh tab.
+  const backTo: string =
+    typeof (location.state as { from?: unknown } | null)?.from === 'string'
+      ? ((location.state as { from: string }).from)
+      : '/leads'
   const { user } = useAuth()
   const { socket, connected } = useSocket()
   // Whether this user type ever needs the representative list (for picker & "Calling As" selector)
@@ -545,7 +555,7 @@ export default function LeadDetail() {
       const res = await leadsAPI.assignLead(id!, assignedTo)
       if (res.success) {
         if (user?.role === 'representative' && assignedTo && String(assignedTo) !== String(user.id)) {
-          navigate('/leads')
+          navigate(backTo)
           return
         }
         setLead(res.data)
@@ -911,7 +921,7 @@ export default function LeadDetail() {
       setIsDeletingLead(true)
       const response = await leadsAPI.deleteLead(lead._id)
       if (!response.success) return
-      navigate('/leads')
+      navigate(backTo)
     } catch (error) {
       console.error('Failed to delete lead:', error)
     } finally {
@@ -1077,7 +1087,7 @@ export default function LeadDetail() {
       {/* Header */}
       <div className="bg-white border-b border-[#E2E8F0] px-5 py-2.5 sticky top-0 z-20">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/leads')} className="p-1 rounded-lg hover:bg-[#F1F5F9] text-[#475569] transition-colors">
+          <button onClick={() => navigate(backTo)} className="p-1 rounded-lg hover:bg-[#F1F5F9] text-[#475569] transition-colors">
             <ArrowLeft size={15} />
           </button>
           <div className="flex-1 min-w-0">

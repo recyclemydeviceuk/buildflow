@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState, useRef, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Search, MapPin, ChevronRight, ArrowUpDown, X, Plus, ChevronLeft, RefreshCw, Trash2, ToggleLeft, ToggleRight, Loader2, Download, User, ChevronDown, Clock, CalendarDays, Check } from 'lucide-react'
 import { leadsAPI, type Lead } from '../api/leads'
 import type { LeadFieldConfig } from '../api/settings'
@@ -216,6 +216,7 @@ interface LeadListProps {
 
 export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
   const navigate = useNavigate()
+  const location = useLocation()
   const { user } = useAuth()
   const { socket, connected } = useSocket()
   const isManager = user?.role === 'manager'
@@ -687,9 +688,13 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
         windowScrollY: typeof window !== 'undefined' ? window.scrollY : 0,
         ts: Date.now(),
       })
-      navigate(`/leads/${leadId}`)
+      // Pass the current path through router state so the LeadDetail back
+      // button can return to /leads/failed when the user came from there
+      // (instead of dumping them onto My Leads, where the lead they just
+      // closed wouldn't even be visible because Failed leads are excluded).
+      navigate(`/leads/${leadId}`, { state: { from: location.pathname } })
     },
-    [mode, filtersSignature, paginationMode, leads, pagination, infiniteLeads, infinitePage, hasMore, navigate]
+    [mode, filtersSignature, paginationMode, leads, pagination, infiniteLeads, infinitePage, hasMore, navigate, location.pathname]
   )
 
   const fetchLeads = useCallback(
