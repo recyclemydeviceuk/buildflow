@@ -69,6 +69,23 @@ export default function Sidebar({ role, collapsed, onToggle }: SidebarProps) {
   const [availabilityUpdating, setAvailabilityUpdating] = useState(false)
   const [resettingCallStatus, setResettingCallStatus] = useState(false)
   const [reminderBadgeCount, setReminderBadgeCount] = useState(0)
+
+  // When the user is on a lead detail page (/leads/:id), the URL alone
+  // doesn't tell us whether they came from Leads or Failed Leads — both
+  // routes feed into /leads/:id. We mirror the source list into
+  // sessionStorage when navigating in (see LeadList.navigateToLead) and
+  // read it here so the sidebar highlights the right entry.
+  // Re-read on every route change so leaving the detail page clears the
+  // override naturally.
+  const leadDetailSource: string | null = (() => {
+    if (!/^\/leads\/[^/]+$/.test(location.pathname)) return null
+    if (location.pathname === '/leads/failed') return null // not a detail URL
+    try {
+      const stored = window.sessionStorage.getItem('buildflow:lead-detail-source')
+      if (stored && stored.startsWith('/leads')) return stored
+    } catch { /* ignore */ }
+    return null
+  })()
   const navItems = (role === 'manager' ? managerNav : repNav).filter((item) => {
     if (item.path === '/dialer' && !featureControls.dialer) return false
     if (item.path === '/analytics' && !featureControls.analyticsAccess) return false
@@ -254,6 +271,13 @@ export default function Sidebar({ role, collapsed, onToggle }: SidebarProps) {
     // /leads from also lighting up when the user is on /leads/failed, we
     // skip the prefix match if any *more specific* sibling path also matches.
     const isActive = (() => {
+      // Lead detail pages: prefer the source list (Failed Leads vs Leads)
+      // we recorded on the way in. Otherwise both /leads and /leads/failed
+      // would have an equal claim and the more-specific check below can't
+      // disambiguate them from a /leads/:id pathname alone.
+      if (leadDetailSource) {
+        return item.path === leadDetailSource
+      }
       if (location.pathname === item.path) return true
       if (item.path === '/agent' || item.path === '/dashboard') return false
       const moreSpecificMatch = navItems.some(
