@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Bell, BarChart2,
   FileText, Shield, Settings, Link2, BarChart3, Phone, LogOut, CalendarClock, Calculator,
-  ChevronLeft, ChevronRight, Grid3x3
+  ChevronLeft, ChevronRight, Grid3x3, UserX
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { UserRole } from '../../App'
@@ -22,6 +22,7 @@ interface SidebarProps {
 const managerNav = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
   { label: 'Leads', icon: Users, path: '/leads' },
+  { label: 'Failed Leads', icon: UserX, path: '/leads/failed' },
   { label: 'Dialer', icon: Grid3x3, path: '/dialer' },
   { label: 'Call Log', icon: Phone, path: '/call-log' },
   { label: 'Follow Ups', icon: CalendarClock, path: '/follow-ups' },
@@ -36,6 +37,7 @@ const managerNav = [
 const repNav = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/agent' },
   { label: 'My Leads', icon: Users, path: '/leads' },
+  { label: 'Failed Leads', icon: UserX, path: '/leads/failed' },
   { label: 'Dialer', icon: Grid3x3, path: '/dialer' },
   { label: 'Call Log', icon: Phone, path: '/call-log' },
   { label: 'Follow Ups', icon: CalendarClock, path: '/follow-ups' },
@@ -247,9 +249,23 @@ export default function Sidebar({ role, collapsed, onToggle }: SidebarProps) {
   )
 
   const renderNavItem = (item: typeof navItems[0]) => {
-    const isActive =
-      location.pathname === item.path ||
-      (item.path !== '/agent' && item.path !== '/dashboard' && location.pathname.startsWith(item.path + '/'))
+    // A nav item is active when the current path exactly matches its `path`,
+    // or starts with it (covers nested routes like /leads/123). To stop
+    // /leads from also lighting up when the user is on /leads/failed, we
+    // skip the prefix match if any *more specific* sibling path also matches.
+    const isActive = (() => {
+      if (location.pathname === item.path) return true
+      if (item.path === '/agent' || item.path === '/dashboard') return false
+      const moreSpecificMatch = navItems.some(
+        (other) =>
+          other.path !== item.path &&
+          other.path.startsWith(item.path + '/') &&
+          (location.pathname === other.path ||
+            location.pathname.startsWith(other.path + '/'))
+      )
+      if (moreSpecificMatch) return false
+      return location.pathname.startsWith(item.path + '/')
+    })()
     const hasBadge = item.path === '/reminders' && reminderBadgeCount > 0
 
     return (

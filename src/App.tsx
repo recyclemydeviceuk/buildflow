@@ -59,6 +59,9 @@ function AppRoutes() {
           <Route path="dashboard" element={role === 'manager' ? <Dashboard /> : <Navigate to="/agent" replace />} />
           <Route path="agent" element={role === 'representative' ? <AgentDashboard /> : <Navigate to="/dashboard" replace />} />
           <Route path="leads" element={<LeadList />} />
+          {/* Failed Leads — defined before /leads/:id so 'failed' isn't
+              swallowed as an :id param. */}
+          <Route path="leads/failed" element={<LeadList mode="failed" />} />
           <Route path="leads/:id" element={<LeadDetail />} />
 
           {/* Follow-up routes — gated by followUpReminders */}

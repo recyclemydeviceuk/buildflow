@@ -48,7 +48,29 @@ const sourceColors: Record<string, string> = {
   'Google ADS': '#EA4335',
 }
 
-const LEAD_LIST_FILTERS_STORAGE_KEY = 'buildflow:lead-list-filters'
+// Mode-aware storage key: My Leads and Failed Leads share the same component
+// but persist their filters separately so picking "RNR" on the failed page
+// doesn't bleed into My Leads (and vice versa).
+const filtersStorageKey = (mode: LeadListMode) =>
+  mode === 'failed' ? 'buildflow:lead-list-filters:failed' : 'buildflow:lead-list-filters'
+
+export type LeadListMode = 'active' | 'failed'
+
+// Curated failed-reason list used both as the LeadDetail dropdown source AND
+// the Failed Leads filter options. RNR (Ring No Response) was added so reps
+// can extract every unanswered number for re-targeting.
+export const FAILED_REASONS = [
+  'RNR',
+  'Not Responding',
+  'Not Interested',
+  'Budget Issue',
+  'Location Issue',
+  'Timeline Issue',
+  'Competition',
+  'Not Enquired',
+  'Invalid Number',
+  'Other',
+] as const
 
 type PersistedLeadFilters = {
   city: string[]
@@ -58,6 +80,7 @@ type PersistedLeadFilters = {
   search: string
   source: string[]
   followUp: string[]
+  failedReason: string[]
   dateRange: { from: string | null; to: string | null }
 }
 
@@ -106,20 +129,22 @@ const emptyPersistedFilters = (): PersistedLeadFilters => ({
   search: '',
   source: [],
   followUp: [],
+  failedReason: [],
   dateRange: { from: null, to: null },
 })
 
-const readPersistedLeadFilters = (): PersistedLeadFilters => {
+const readPersistedLeadFilters = (mode: LeadListMode): PersistedLeadFilters => {
   if (typeof window === 'undefined') return emptyPersistedFilters()
 
   try {
-    const rawValue = window.localStorage.getItem(LEAD_LIST_FILTERS_STORAGE_KEY)
+    const rawValue = window.localStorage.getItem(filtersStorageKey(mode))
     if (!rawValue) return emptyPersistedFilters()
 
     const parsed = JSON.parse(rawValue) as Partial<PersistedLeadFilters & {
       // Legacy single-string fields kept here only so coerceToArray sees them
       // when migrating an old localStorage entry.
-      city?: unknown; disposition?: unknown; owner?: unknown; source?: unknown; followUp?: unknown
+      city?: unknown; disposition?: unknown; owner?: unknown; source?: unknown
+      followUp?: unknown; failedReason?: unknown
     }>
     return {
       city: coerceToArray(parsed.city),
@@ -129,6 +154,7 @@ const readPersistedLeadFilters = (): PersistedLeadFilters => {
       search: typeof parsed.search === 'string' ? parsed.search : '',
       source: coerceToArray(parsed.source),
       followUp: coerceToArray(parsed.followUp),
+      failedReason: coerceToArray(parsed.failedReason),
       dateRange: parsed.dateRange || { from: null, to: null },
     }
   } catch {
@@ -136,14 +162,25 @@ const readPersistedLeadFilters = (): PersistedLeadFilters => {
   }
 }
 
-export default function LeadList() {
+interface LeadListProps {
+  /**
+   * 'active' (default) → My Leads / Leads page; excludes Failed disposition.
+   * 'failed'           → Failed Leads page; forces disposition=Failed and
+   *                      surfaces the failedReason multi-select instead of
+   *                      the disposition picker.
+   */
+  mode?: LeadListMode
+}
+
+export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { socket, connected } = useSocket()
   const isManager = user?.role === 'manager'
   const canAssignOwner = user?.role === 'manager' || user?.role === 'representative'
   const canEditCreatedAt = user?.role === 'manager' || user?.role === 'representative'
-  const [persistedFilters] = useState(readPersistedLeadFilters)
+  const isFailedMode = mode === 'failed'
+  const [persistedFilters] = useState(() => readPersistedLeadFilters(mode))
 
   // Consume the navigation snapshot exactly once on mount. We compute the
   // filter signature from the persisted filters (the same source the filter
@@ -157,12 +194,14 @@ export default function LeadList() {
     leadListNavigationSnapshot = null
     if (!snap) return null
     const expected = JSON.stringify({
+      mode,
       search: persistedFilters.search.trim(),
       filterDisposition: [...persistedFilters.disposition].sort(),
       filterSource: [...persistedFilters.source].sort(),
       filterCity: [...persistedFilters.city].sort(),
       filterOwner: [...persistedFilters.owner].sort(),
       filterFollowUp: [...persistedFilters.followUp].sort(),
+      filterFailedReason: [...persistedFilters.failedReason].sort(),
       showMyLeadsOnly: false,
       paginationMode: persistedFilters.paginationMode,
       dateFrom: persistedFilters.dateRange.from,
@@ -191,6 +230,9 @@ export default function LeadList() {
   // Terminal dispositions (Failed, Booking Done, Agreement Done) are never
   // counted as missing — they don't need ongoing follow-ups.
   const [filterFollowUp, setFilterFollowUp] = useState<string[]>(persistedFilters.followUp)
+  // Only used in Failed Leads mode. Multi-select over the curated reasons
+  // list (RNR, Not Interested, Budget Issue, …).
+  const [filterFailedReason, setFilterFailedReason] = useState<string[]>(persistedFilters.failedReason)
   // Per-bucket counts for the follow-up filter dropdown (shown as inline badges).
   // Refreshed alongside the leads list so the numbers stay in sync with edits.
   const [followUpCounts, setFollowUpCounts] = useState<{
@@ -302,13 +344,14 @@ export default function LeadList() {
       search,
       source: filterSource,
       followUp: filterFollowUp,
+      failedReason: filterFailedReason,
       dateRange: {
         from: dateRange.from ? dateRange.from.toISOString() : null,
         to: dateRange.to ? dateRange.to.toISOString() : null,
       },
     }
-    window.localStorage.setItem(LEAD_LIST_FILTERS_STORAGE_KEY, JSON.stringify(payload))
-  }, [filterCity, filterDisposition, filterOwner, filterSource, filterFollowUp, paginationMode, search, dateRange])
+    window.localStorage.setItem(filtersStorageKey(mode), JSON.stringify(payload))
+  }, [mode, filterCity, filterDisposition, filterOwner, filterSource, filterFollowUp, filterFailedReason, paginationMode, search, dateRange])
 
   useEffect(() => {
     const handleLeadFieldsUpdated = () => {
@@ -360,8 +403,18 @@ export default function LeadList() {
       const params: Record<string, string> = { page: String(page), limit: '30' }
 
       if (search.trim()) params.search = search.trim()
-      // Multi-select filters get joined with commas; backend splits the same way.
-      if (filterDisposition.length > 0) params.disposition = filterDisposition.join(',')
+      if (isFailedMode) {
+        // Failed Leads view — disposition is locked to Failed regardless of
+        // any persisted disposition filter from a different mode.
+        params.disposition = 'Failed'
+        if (filterFailedReason.length > 0) params.failedReason = filterFailedReason.join(',')
+      } else {
+        // Active leads view — exclude Failed so a Failed lead never appears
+        // here (matches the user-visible promise: same lead is never in both
+        // My Leads and Failed Leads).
+        params.excludeDispositions = 'Failed'
+        if (filterDisposition.length > 0) params.disposition = filterDisposition.join(',')
+      }
       if (filterSource.length > 0) params.source = filterSource.join(',')
       if (filterCity.length > 0) params.city = filterCity.join(',')
       if (isManager && filterOwner.length > 0) params.owner = filterOwner.join(',')
@@ -392,7 +445,7 @@ export default function LeadList() {
 
       return params
     },
-    [search, filterDisposition, filterSource, filterCity, isManager, filterOwner, filterFollowUp, dateRange, dateMode, showMyLeadsOnly, user?.id]
+    [isFailedMode, search, filterDisposition, filterSource, filterCity, isManager, filterOwner, filterFollowUp, filterFailedReason, dateRange, dateMode, showMyLeadsOnly, user?.id]
   )
 
   // Stable string identity for the current filter set. Used to validate the
@@ -401,6 +454,7 @@ export default function LeadList() {
   const filtersSignature = useMemo(
     () =>
       JSON.stringify({
+        mode,
         search: search.trim(),
         // Sort the array filters so [A,B] and [B,A] produce the same signature
         // (selection order doesn't change the result set).
@@ -409,13 +463,14 @@ export default function LeadList() {
         filterCity: [...filterCity].sort(),
         filterOwner: [...filterOwner].sort(),
         filterFollowUp: [...filterFollowUp].sort(),
+        filterFailedReason: [...filterFailedReason].sort(),
         showMyLeadsOnly,
         paginationMode,
         dateFrom: dateRange.from ? dateRange.from.toISOString() : null,
         dateTo: dateRange.to ? dateRange.to.toISOString() : null,
         dateMode,
       }),
-    [search, filterDisposition, filterSource, filterCity, filterOwner, filterFollowUp, showMyLeadsOnly, paginationMode, dateRange, dateMode]
+    [mode, search, filterDisposition, filterSource, filterCity, filterOwner, filterFollowUp, filterFailedReason, showMyLeadsOnly, paginationMode, dateRange, dateMode]
   )
 
   // Restore scroll position on the very first commit, before paint. Because
@@ -783,7 +838,8 @@ export default function LeadList() {
 
   const hasFilters =
     Boolean(search.trim()) ||
-    filterDisposition.length > 0 ||
+    (!isFailedMode && filterDisposition.length > 0) ||
+    (isFailedMode && filterFailedReason.length > 0) ||
     filterSource.length > 0 ||
     filterCity.length > 0 ||
     filterFollowUp.length > 0 ||
@@ -797,6 +853,7 @@ export default function LeadList() {
     setFilterCity([])
     setFilterOwner([])
     setFilterFollowUp([])
+    setFilterFailedReason([])
     setSearch('')
     setDateRange({ from: null, to: null })
     if (!isManager) setShowMyLeadsOnly(false)
@@ -1309,9 +1366,20 @@ export default function LeadList() {
       <div className="bg-white border-b border-[#E2E8F0] px-5 py-3">
         <div className="flex items-center justify-between mb-2.5 gap-2 flex-wrap">
           <div>
-            <h1 className="text-base font-bold text-[#0F172A]">Leads</h1>
+            <h1 className="text-base font-bold text-[#0F172A] flex items-center gap-2">
+              {isFailedMode ? (
+                <>
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-[#FEF2F2] text-[#DC2626] border border-[#FECACA]">
+                    <X size={11} strokeWidth={3} />
+                  </span>
+                  Failed Leads
+                </>
+              ) : (
+                'Leads'
+              )}
+            </h1>
             <p className="text-xs text-[#475569] mt-0.5">
-              {pagination.total} leads
+              {pagination.total} {isFailedMode ? 'failed leads' : 'leads'}
               {isManager && filterOwner.length === 1 && filterOwner[0] === 'unassigned' ? ' awaiting assignment' : ''}
             </p>
           </div>
@@ -1434,14 +1502,32 @@ export default function LeadList() {
             />
           </div>
 
-          <FancyMultiSelect
-            values={filterDisposition}
-            onChange={setFilterDisposition}
-            options={dispositionOptions.filter((opt) => opt.value !== 'All')}
-            placeholder="Disposition"
-            minWidth={70}
-            panelWidth={220}
-          />
+          {isFailedMode ? (
+            <FancyMultiSelect
+              values={filterFailedReason}
+              onChange={setFilterFailedReason}
+              options={FAILED_REASONS.map((reason) => ({
+                value: reason,
+                label: reason,
+                dotColor: '#DC2626',
+              }))}
+              placeholder="Failed Reason"
+              minWidth={110}
+              panelWidth={220}
+            />
+          ) : (
+            <FancyMultiSelect
+              values={filterDisposition}
+              onChange={setFilterDisposition}
+              // Hide 'All' AND 'Failed' from the picker — Failed leads live on
+              // their own page now, so allowing the user to filter them in
+              // here would just confuse the My Leads experience.
+              options={dispositionOptions.filter((opt) => opt.value !== 'All' && opt.value !== 'Failed')}
+              placeholder="Disposition"
+              minWidth={70}
+              panelWidth={220}
+            />
+          )}
 
           <FancyMultiSelect
             values={filterSource}
