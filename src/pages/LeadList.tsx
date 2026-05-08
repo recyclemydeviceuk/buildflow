@@ -1942,6 +1942,10 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
       {showExportModal && isManager ? (
         <ExportLeadsModal
           initialOwner={filterOwner.length === 1 ? filterOwner[0] : 'All'}
+          // Default the prior-milestone preset on when the manager opens the
+          // modal from the Failed Leads page — that's the obvious place for
+          // a re-targeting export, and the toggle stays editable.
+          initialPriorMilestoneOnly={isFailedMode}
           onClose={() => setShowExportModal(false)}
           owners={owners}
         />

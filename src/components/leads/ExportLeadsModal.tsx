@@ -1,9 +1,16 @@
-import { useState } from 'react'
-import { X, Download, Calendar, CheckSquare, Loader2, FileSpreadsheet } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { X, Download, Calendar, CheckSquare, Loader2, FileSpreadsheet, Sparkles } from 'lucide-react'
 import { leadsAPI } from '../../api/leads'
 
 interface ExportLeadsModalProps {
   initialOwner?: string
+  /**
+   * When true, opens the modal pre-configured for the prior-milestone
+   * preset (Failed leads that previously hit Visit Done or Meeting Done).
+   * The Failed Leads page passes this so reps don't have to discover the
+   * toggle.
+   */
+  initialPriorMilestoneOnly?: boolean
   onClose: () => void
   owners: { id: string; name: string }[]
 }
@@ -18,6 +25,7 @@ const DATE_RANGES = [
 const EXPORTABLE_FIELDS = [
   { key: 'name', label: 'Name', default: true },
   { key: 'phone', label: 'Phone', default: true },
+  { key: 'alternatePhone', label: 'Alternate Phone', default: false },
   { key: 'email', label: 'Email', default: true },
   { key: 'city', label: 'City', default: true },
   { key: 'source', label: 'Source', default: true },
@@ -38,16 +46,73 @@ const EXPORTABLE_FIELDS = [
   { key: 'nextFollowUp', label: 'Next Follow Up', default: false },
   { key: 'createdAt', label: 'Created At', default: true },
   { key: 'updatedAt', label: 'Updated At', default: false },
+  // Prior-milestone columns. Hidden from the default field grid because
+  // they're only meaningful with the toggle on; the toggle force-enables
+  // them automatically.
+  { key: 'priorMilestones', label: 'Prior Milestones', default: false, milestoneOnly: true },
+  { key: 'visitDoneAt', label: 'Visit Done At', default: false, milestoneOnly: true },
+  { key: 'visitDoneNote', label: 'Visit Done Note', default: false, milestoneOnly: true },
+  { key: 'meetingDoneAt', label: 'Meeting Done At', default: false, milestoneOnly: true },
+  { key: 'meetingDoneNote', label: 'Meeting Done Note', default: false, milestoneOnly: true },
+  { key: 'failedAt', label: 'Failed At', default: false, milestoneOnly: true },
+  { key: 'failedNote', label: 'Failed Note', default: false, milestoneOnly: true },
 ]
 
-export default function ExportLeadsModal({ initialOwner = 'All', onClose, owners }: ExportLeadsModalProps) {
-  const [dateRange, setDateRange] = useState('today')
+// Columns auto-included when the prior-milestone toggle is on. The user can
+// still de-select any of these in the field grid afterwards.
+const MILESTONE_PRESET_FIELDS = [
+  'name',
+  'phone',
+  'alternatePhone',
+  'email',
+  'city',
+  'source',
+  'ownerName',
+  'priorMilestones',
+  'visitDoneAt',
+  'visitDoneNote',
+  'meetingDoneAt',
+  'meetingDoneNote',
+  'failedReason',
+  'failedAt',
+  'failedNote',
+  'updatedAt',
+]
+
+export default function ExportLeadsModal({
+  initialOwner = 'All',
+  initialPriorMilestoneOnly = false,
+  onClose,
+  owners,
+}: ExportLeadsModalProps) {
+  const [dateRange, setDateRange] = useState(initialPriorMilestoneOnly ? 'lifetime' : 'today')
   const [owner, setOwner] = useState(initialOwner)
+  const [priorMilestoneOnly, setPriorMilestoneOnly] = useState<boolean>(initialPriorMilestoneOnly)
   const [selectedFields, setSelectedFields] = useState<string[]>(
-    EXPORTABLE_FIELDS.filter(f => f.default).map(f => f.key)
+    initialPriorMilestoneOnly
+      ? MILESTONE_PRESET_FIELDS
+      : EXPORTABLE_FIELDS.filter((f) => f.default && !f.milestoneOnly).map((f) => f.key)
   )
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState('')
+
+  // When the toggle flips on, force-enable the milestone columns (the user
+  // can still un-tick any of them in the grid afterwards). When it flips off,
+  // strip the milestone-only columns so the CSV doesn't end up with empty
+  // columns the user didn't ask for.
+  useEffect(() => {
+    if (priorMilestoneOnly) {
+      setSelectedFields((current) => {
+        const merged = new Set(current)
+        for (const k of MILESTONE_PRESET_FIELDS) merged.add(k)
+        return Array.from(merged)
+      })
+    } else {
+      setSelectedFields((current) =>
+        current.filter((k) => !EXPORTABLE_FIELDS.find((f) => f.key === k)?.milestoneOnly)
+      )
+    }
+  }, [priorMilestoneOnly])
 
   const toggleField = (key: string) => {
     setSelectedFields(current =>
@@ -56,7 +121,11 @@ export default function ExportLeadsModal({ initialOwner = 'All', onClose, owners
   }
 
   const selectAllFields = () => {
-    setSelectedFields(EXPORTABLE_FIELDS.map(f => f.key))
+    // When the milestone toggle is OFF, hide milestone-only columns from
+    // "Select all" — they would just be empty for ordinary exports.
+    setSelectedFields(
+      EXPORTABLE_FIELDS.filter((f) => priorMilestoneOnly || !f.milestoneOnly).map((f) => f.key)
+    )
   }
 
   const deselectAllFields = () => {
@@ -78,13 +147,15 @@ export default function ExportLeadsModal({ initialOwner = 'All', onClose, owners
         fields: selectedFields,
         format: 'csv',
         owner: owner !== 'All' ? owner : undefined,
+        priorMilestoneOnly: priorMilestoneOnly || undefined,
       })
 
       // Create download link
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `leads_${dateRange}_${new Date().toISOString().split('T')[0]}.csv`
+      const filenamePrefix = priorMilestoneOnly ? 'failed_with_milestones' : 'leads'
+      link.download = `${filenamePrefix}_${dateRange}_${new Date().toISOString().split('T')[0]}.csv`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -121,6 +192,60 @@ export default function ExportLeadsModal({ initialOwner = 'All', onClose, owners
         </div>
 
         <div className="p-5 overflow-y-auto max-h-[calc(90vh-180px)]">
+          {/* Prior-milestone preset toggle. Lives at the top so the user
+              sees it before tweaking date / fields — flipping it on changes
+              both the filter and the suggested column set. */}
+          <div className="mb-6">
+            <button
+              type="button"
+              onClick={() => setPriorMilestoneOnly((v) => !v)}
+              className={`w-full text-left rounded-xl border p-3.5 transition-all ${
+                priorMilestoneOnly
+                  ? 'border-[#7C3AED] bg-gradient-to-br from-[#F5F3FF] to-[#FDF4FF] shadow-[0_0_0_3px_rgba(124,58,237,0.08)]'
+                  : 'border-[#E2E8F0] hover:bg-[#F8FAFC]'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className={`shrink-0 mt-0.5 w-9 h-9 rounded-lg flex items-center justify-center ${
+                    priorMilestoneOnly ? 'bg-[#7C3AED] text-white' : 'bg-[#F1F5F9] text-[#64748B]'
+                  }`}
+                >
+                  <Sparkles size={16} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className={`text-sm font-bold ${priorMilestoneOnly ? 'text-[#5B21B6]' : 'text-[#0F172A]'}`}>
+                      Failed leads that previously hit Visit Done or Meeting Done
+                    </p>
+                    {priorMilestoneOnly && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#7C3AED] text-white text-[10px] font-extrabold tracking-wider uppercase">
+                        On
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-[#64748B] mt-1 leading-relaxed">
+                    Re-targeting preset. Filters to leads currently marked
+                    Failed whose status history shows at least one Visit Done
+                    or Meeting Done — and adds milestone columns (with the
+                    notes attached at each stage and the failure reason).
+                  </p>
+                </div>
+                <div
+                  className={`shrink-0 w-10 h-6 rounded-full p-0.5 transition-colors ${
+                    priorMilestoneOnly ? 'bg-[#7C3AED]' : 'bg-[#CBD5E1]'
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                      priorMilestoneOnly ? 'translate-x-4' : ''
+                    }`}
+                  />
+                </div>
+              </div>
+            </button>
+          </div>
+
           {/* Date Range Selection */}
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-3">
@@ -193,7 +318,7 @@ export default function ExportLeadsModal({ initialOwner = 'All', onClose, owners
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              {EXPORTABLE_FIELDS.map((field) => (
+              {EXPORTABLE_FIELDS.filter((f) => priorMilestoneOnly || !f.milestoneOnly).map((field) => (
                 <button
                   key={field.key}
                   onClick={() => toggleField(field.key)}

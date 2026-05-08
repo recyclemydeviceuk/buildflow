@@ -253,7 +253,18 @@ export const leadsAPI = {
     return response.data
   },
 
-  exportLeads: async (data: { dateRange: string; fields?: string[]; format?: string; owner?: string }): Promise<Blob> => {
+  exportLeads: async (data: {
+    dateRange: string
+    fields?: string[]
+    format?: string
+    owner?: string
+    /**
+     * When true, narrows the export to Failed leads whose status history
+     * includes at least one Visit Done or Meeting Done. Useful for picking
+     * up re-targeting work on warm leads that fell through.
+     */
+    priorMilestoneOnly?: boolean
+  }): Promise<Blob> => {
     const response = await client.post('/leads/export', data, { responseType: 'blob' })
     return response.data
   },
