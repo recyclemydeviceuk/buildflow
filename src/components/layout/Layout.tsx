@@ -82,10 +82,43 @@ export default function Layout() {
   useEffect(() => {
     if (!socket) return
 
-    const handleAssigned = (data: { leadId: string; leadName?: string; assignedTo: string; assignedToName: string }) => {
+    const handleAssigned = (data: {
+      leadId: string
+      leadName?: string
+      assignedTo: string
+      assignedToName: string
+      phone?: string
+      city?: string
+      source?: string
+    }) => {
       if (data.assignedTo === user?.id) {
-        pushAssignment({ leadId: data.leadId, leadName: data.leadName || 'New Lead' })
+        pushAssignment({
+          leadId: data.leadId,
+          leadName: data.leadName || 'New Lead',
+          phone: data.phone,
+          city: data.city,
+          source: data.source,
+        })
       }
+    }
+
+    // Per-user channel — fired directly to the assignee. This is the primary
+    // signal now: the team broadcast is kept as a fallback for managers'
+    // dashboards but cannot be missed because of room-membership races.
+    const handleAssignedToYou = (data: {
+      leadId: string
+      leadName?: string
+      phone?: string
+      city?: string
+      source?: string
+    }) => {
+      pushAssignment({
+        leadId: data.leadId,
+        leadName: data.leadName || 'New Lead',
+        phone: data.phone,
+        city: data.city,
+        source: data.source,
+      })
     }
 
     const handleCallEvent = (call: Call) => {
@@ -100,11 +133,13 @@ export default function Layout() {
     }
 
     socket.on('lead:assigned', handleAssigned)
+    socket.on('lead:assigned_to_you', handleAssignedToYou)
     socket.on('call:new', handleCallEvent)
     socket.on('call:status_updated', handleCallEvent)
 
     return () => {
       socket.off('lead:assigned', handleAssigned)
+      socket.off('lead:assigned_to_you', handleAssignedToYou)
       socket.off('call:new', handleCallEvent)
       socket.off('call:status_updated', handleCallEvent)
     }

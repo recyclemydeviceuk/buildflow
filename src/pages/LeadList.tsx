@@ -810,11 +810,18 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
 
     socket.on('lead:incoming', handleLeadRefresh)
     socket.on('lead:assigned', handleLeadRefresh)
+    // Per-user channel: the backend fires this DIRECTLY to the receiving rep
+    // for every assignment path (manual, bulk, round-robin, queue). It is the
+    // most reliable way to refresh the rep's own LeadList — the team-broadcast
+    // can be lost if the team room is somehow disjoined, the per-user room
+    // always survives.
+    socket.on('lead:assigned_to_you', handleLeadRefresh)
     socket.on('lead:deleted', handleLeadRefresh)
 
     return () => {
       socket.off('lead:incoming', handleLeadRefresh)
       socket.off('lead:assigned', handleLeadRefresh)
+      socket.off('lead:assigned_to_you', handleLeadRefresh)
       socket.off('lead:deleted', handleLeadRefresh)
     }
   }, [socket, connected, pagination.page, paginationMode, fetchLeads, initInfiniteScroll])

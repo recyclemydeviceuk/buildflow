@@ -26,6 +26,18 @@ export interface CallMetrics {
   connectionRate: number
 }
 
+// Turnaround time = how long after a lead is assigned to this rep before
+// they make their first contact attempt (first Call record). All durations
+// are in seconds. `null` for the percentile values means there is no data yet
+// for this rep (e.g. no calls placed on any assigned lead).
+export interface TurnaroundStats {
+  avgSeconds: number | null
+  medianSeconds: number | null
+  p90Seconds: number | null
+  contactedCount: number
+  assignedCount: number
+}
+
 export interface RepresentativePerformance {
   id: string
   name: string
@@ -36,6 +48,7 @@ export interface RepresentativePerformance {
   lastLoginAt?: string | null
   leads: LeadMetrics
   calls: CallMetrics
+  turnaround?: TurnaroundStats
   activityScore: number
 }
 
@@ -135,6 +148,23 @@ export interface RepresentativeDetailPerformance {
   leadAnalytics: LeadAnalytics
   callAnalytics: CallAnalytics
   upcomingReminders: UpcomingReminder[]
+  turnaround?: TurnaroundStats
+}
+
+// Pretty-print a duration in seconds for the dashboard. Designed for at-a-
+// glance reading by managers: "2m 14s", "1h 45m", "3d 2h".
+export const formatTurnaround = (seconds: number | null | undefined): string => {
+  if (seconds === null || seconds === undefined) return '—'
+  if (seconds < 60) return `${seconds}s`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+  if (seconds < 86400) {
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    return `${h}h ${m}m`
+  }
+  const d = Math.floor(seconds / 86400)
+  const h = Math.floor((seconds % 86400) / 3600)
+  return `${d}d ${h}h`
 }
 
 export const performanceAPI = {
