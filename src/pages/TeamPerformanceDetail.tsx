@@ -20,7 +20,7 @@ import {
   Loader2,
   RefreshCw,
 } from 'lucide-react'
-import { performanceAPI, type RepresentativeDetailPerformance } from '../api/performance'
+import { performanceAPI, formatTurnaround, type RepresentativeDetailPerformance } from '../api/performance'
 import { useAuth } from '../context/AuthContext'
 
 const MetricCard = ({
@@ -174,7 +174,7 @@ export default function TeamPerformanceDetail() {
     )
   }
 
-  const { representative, timeMetrics, leadAnalytics, callAnalytics, upcomingReminders } = data
+  const { representative, timeMetrics, leadAnalytics, callAnalytics, upcomingReminders, turnaround } = data
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
@@ -275,6 +275,57 @@ export default function TeamPerformanceDetail() {
             </div>
           </div>
         </div>
+
+        {/* Turnaround Time — assigned → first contact. Median is headline,
+            avg + p90 give the spread. This is the metric managers use to spot
+            slow responders before SLAs slip. */}
+        {turnaround && (
+          <div className="bg-gradient-to-br from-[#EFF6FF] via-[#F0F7FF] to-white border border-[#DBEAFE] rounded-xl p-4 mb-2">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-bold text-[#0F172A] flex items-center gap-1.5">
+                  <Clock size={16} className="text-[#1D4ED8]" />
+                  Turnaround Time
+                </h3>
+                <p className="text-xs text-[#64748B] mt-0.5">
+                  Time from lead assignment to the rep's first contact attempt
+                </p>
+              </div>
+              <span className="text-xs text-[#64748B]">
+                {turnaround.contactedCount} / {turnaround.assignedCount} leads contacted
+              </span>
+            </div>
+            {turnaround.contactedCount > 0 ? (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-white border border-[#BFDBFE] rounded-lg p-3 text-center">
+                  <p className="text-[10px] uppercase font-semibold text-[#1D4ED8] tracking-wide">Median</p>
+                  <p className="text-2xl font-bold text-[#1D4ED8] mt-1">
+                    {formatTurnaround(turnaround.medianSeconds)}
+                  </p>
+                  <p className="text-[10px] text-[#64748B] mt-0.5">typical lead</p>
+                </div>
+                <div className="bg-white border border-[#E2E8F0] rounded-lg p-3 text-center">
+                  <p className="text-[10px] uppercase font-semibold text-[#0F172A] tracking-wide">Average</p>
+                  <p className="text-2xl font-bold text-[#0F172A] mt-1">
+                    {formatTurnaround(turnaround.avgSeconds)}
+                  </p>
+                  <p className="text-[10px] text-[#64748B] mt-0.5">mean</p>
+                </div>
+                <div className="bg-white border border-[#FECACA] rounded-lg p-3 text-center">
+                  <p className="text-[10px] uppercase font-semibold text-[#EF4444] tracking-wide">P90 (slowest 10%)</p>
+                  <p className="text-2xl font-bold text-[#EF4444] mt-1">
+                    {formatTurnaround(turnaround.p90Seconds)}
+                  </p>
+                  <p className="text-[10px] text-[#64748B] mt-0.5">SLA risk band</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-[#64748B] italic">
+                No turnaround data yet — this rep needs at least one call on an assigned lead before stats appear.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Time-based Metrics */}
         <div className="grid grid-cols-4 gap-4">

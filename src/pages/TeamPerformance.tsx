@@ -18,7 +18,8 @@ import {
   Trophy,
   Medal,
 } from 'lucide-react'
-import { performanceAPI, type RepresentativePerformance, type PerformanceSummary } from '../api/performance'
+import { Clock, Timer } from 'lucide-react'
+import { performanceAPI, formatTurnaround, type RepresentativePerformance, type PerformanceSummary } from '../api/performance'
 import { useAuth } from '../context/AuthContext'
 
 const MetricCard = ({
@@ -127,8 +128,9 @@ const RepresentativeCard = ({
         </div>
       </div>
 
-      {/* Quick Stats */}
-      <div className="px-3 pb-3 grid grid-cols-4 gap-2">
+      {/* Quick Stats — TAT is the median, the most intuitive "how fast is
+          this rep on a new lead" number. Hover to see avg + p90 + sample size. */}
+      <div className="px-3 pb-3 grid grid-cols-5 gap-2">
         <div className="text-center p-1.5 bg-[#F8FAFC] rounded-md">
           <p className="text-sm font-bold text-[#0F172A]">{rep.leads.total}</p>
           <p className="text-[10px] text-[#64748B]">Leads</p>
@@ -144,6 +146,23 @@ const RepresentativeCard = ({
         <div className="text-center p-1.5 bg-[#F8FAFC] rounded-md">
           <p className="text-sm font-bold text-[#0F172A]">{rep.calls.connectionRate}%</p>
           <p className="text-[10px] text-[#64748B]">Conn.</p>
+        </div>
+        <div
+          className="text-center p-1.5 bg-[#F8FAFC] rounded-md"
+          title={
+            rep.turnaround
+              ? `Avg ${formatTurnaround(rep.turnaround.avgSeconds)} · P90 ${formatTurnaround(
+                  rep.turnaround.p90Seconds
+                )} · ${rep.turnaround.contactedCount}/${rep.turnaround.assignedCount} leads contacted`
+              : 'No turnaround data yet'
+          }
+        >
+          <p className="text-sm font-bold text-[#0F172A]">
+            {formatTurnaround(rep.turnaround?.medianSeconds ?? null)}
+          </p>
+          <p className="text-[10px] text-[#64748B] flex items-center justify-center gap-0.5">
+            <Timer size={9} /> TAT
+          </p>
         </div>
       </div>
 
@@ -210,6 +229,48 @@ const RepresentativeCard = ({
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Turnaround Time — full breakdown shown when the manager expands
+              the card. Median is the headline; avg + p90 contextualise it. */}
+          <div className="mt-3 bg-gradient-to-br from-[#EFF6FF] via-[#F0F7FF] to-white border border-[#DBEAFE] rounded-md p-2.5">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-[10px] font-semibold text-[#1D4ED8] uppercase flex items-center gap-1">
+                <Clock size={12} />
+                Turnaround Time (Assigned → First Contact)
+              </h4>
+              {rep.turnaround && rep.turnaround.assignedCount > 0 && (
+                <span className="text-[10px] text-[#64748B]">
+                  {rep.turnaround.contactedCount}/{rep.turnaround.assignedCount} leads
+                </span>
+              )}
+            </div>
+            {rep.turnaround && rep.turnaround.contactedCount > 0 ? (
+              <div className="grid grid-cols-3 gap-2">
+                <div className="text-center p-1.5 bg-white rounded">
+                  <p className="text-[10px] text-[#64748B]">Median</p>
+                  <p className="text-sm font-bold text-[#1D4ED8]">
+                    {formatTurnaround(rep.turnaround.medianSeconds)}
+                  </p>
+                </div>
+                <div className="text-center p-1.5 bg-white rounded">
+                  <p className="text-[10px] text-[#64748B]">Average</p>
+                  <p className="text-sm font-bold text-[#0F172A]">
+                    {formatTurnaround(rep.turnaround.avgSeconds)}
+                  </p>
+                </div>
+                <div className="text-center p-1.5 bg-white rounded">
+                  <p className="text-[10px] text-[#64748B]">P90 (slow)</p>
+                  <p className="text-sm font-bold text-[#EF4444]">
+                    {formatTurnaround(rep.turnaround.p90Seconds)}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-[11px] text-[#64748B] italic">
+                No first-contact data yet — rep needs at least one call on an assigned lead.
+              </p>
+            )}
           </div>
 
           <button
