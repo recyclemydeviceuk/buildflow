@@ -57,6 +57,8 @@ export interface Lead {
   plotSizeUnit?: string | null
   plotOwned?: boolean | null
   buildType?: string | null
+  plotLocation?: string | null
+  structure?: string | null
   campaign?: string | null
   campaignId?: string | null
   lastActivity?: string | null

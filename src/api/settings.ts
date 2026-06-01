@@ -10,6 +10,8 @@ export type LeadFieldKey =
   | 'budget'
   | 'buildType'
   | 'plotOwned'
+  | 'plotLocation'
+  | 'structure'
   | 'campaign'
   | 'plotSize'
   | 'plotSizeUnit'

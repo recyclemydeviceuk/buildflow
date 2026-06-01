@@ -26,7 +26,7 @@ export default function TimyButton() {
     []
   )
 
-  if (!user) return null
+  if (!user || user.role !== 'manager') return null
 
   return (
     <>

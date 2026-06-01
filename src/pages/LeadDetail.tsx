@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
   ArrowLeft, Phone, PhoneOff, PhoneCall, MapPin, Building2,
-  IndianRupee, CheckCircle2, CheckCircle, Mic, ChevronDown, Edit3, User, Delete, Pencil, Trash2, X, History, MessageSquare, Clock, Calendar, ArrowUpRight, ArrowDownLeft, AlertCircle, Voicemail, Mail, Lock, Video, XCircle
+  IndianRupee, CheckCircle2, CheckCircle, Mic, ChevronDown, Edit3, User, Delete, Pencil, Trash2, X, History, MessageSquare, Clock, Calendar, ArrowUpRight, ArrowDownLeft, AlertCircle, Voicemail, Mail, Lock, Video, XCircle, Home, Layers
 } from 'lucide-react'
 import { leadsAPI, type Lead, type Disposition, type LeadStatusNote, type FollowUp } from '../api/leads'
 import { callsAPI, type Call } from '../api/calls'
@@ -824,8 +824,11 @@ export default function LeadDetail() {
   const plotOwnedField = activeLeadFields.find((field) => field.key === 'plotOwned')
   const plotSizeField = activeLeadFields.find((field) => field.key === 'plotSize')
   const plotSizeUnitField = activeLeadFields.find((field) => field.key === 'plotSizeUnit')
+  const structureField = activeLeadFields.find((field) => field.key === 'structure')
   const qualificationFields = activeLeadFields.filter(
-    (field) => field.section === 'qualification' && !['plotSize', 'plotSizeUnit'].includes(field.key)
+    (field) =>
+      field.section === 'qualification' &&
+      !['plotSize', 'plotSizeUnit', 'structure', 'campaign'].includes(field.key)
   )
 
   const latestRecordingCall = useMemo(
@@ -1630,8 +1633,8 @@ export default function LeadDetail() {
                               ? Building2
                               : field.key === 'plotOwned'
                                 ? CheckCircle2
-                                : field.key === 'campaign'
-                                  ? Phone
+                                : field.key === 'plotLocation'
+                                  ? Home
                                   : field.key === 'email'
                                     ? Mail
                                     : User
@@ -1647,8 +1650,8 @@ export default function LeadDetail() {
                                 ? lead.plotOwned
                                   ? 'Yes'
                                   : 'No'
-                                : field.key === 'campaign'
-                                  ? lead.campaign
+                                : field.key === 'plotLocation'
+                                  ? lead.plotLocation
                                   : lead.email
 
                       const fieldOptions =
@@ -1716,12 +1719,12 @@ export default function LeadDetail() {
                     })}
 
                     {plotSizeField || plotSizeUnitField ? (
-                      <div className="md:col-span-2 lg:col-span-2 group">
+                      <div className="group">
                         <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1 group-focus-within:text-[#1D4ED8] transition-colors">
                           {plotSizeField?.label || 'Plot Size'}
                           {plotSizeUnitField ? ' & Units' : ''}
                         </label>
-                        <div className="flex gap-2">
+                        <div className="flex gap-1.5">
                           {plotSizeField ? (
                             <input
                               type="text"
@@ -1730,13 +1733,13 @@ export default function LeadDetail() {
                               onChange={(e) => isLeadOwner && setPlotSize(e.target.value)}
                               onBlur={(e) => isLeadOwner && handleSaveQualification('plotSize', e.target.value || null)}
                               placeholder={plotSizeField.placeholder || 'Size...'}
-                              className={`flex-1 px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] font-medium focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all ${!isLeadOwner ? 'cursor-default' : ''}`}
+                              className={`flex-1 min-w-0 px-2.5 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] font-medium focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all ${!isLeadOwner ? 'cursor-default' : ''}`}
                             />
                           ) : (
-                            <div className="flex-1" />
+                            <div className="flex-1 min-w-0" />
                           )}
                           {plotSizeUnitField ? (
-                            <div className="relative w-28">
+                            <div className="relative w-20 shrink-0">
                               <select
                                 value={plotUnit}
                                 disabled={!isLeadOwner}
@@ -1745,15 +1748,44 @@ export default function LeadDetail() {
                                   setPlotUnit(e.target.value)
                                   handleSaveQualification('plotSizeUnit', e.target.value)
                                 }}
-                                className="w-full appearance-none px-3 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs font-medium text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                                className="w-full appearance-none pl-2 pr-5 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs font-medium text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                               >
                                 {(plotSizeUnitField.options || []).map((unit) => (
                                   <option key={unit} value={unit}>{unit}</option>
                                 ))}
                               </select>
-                              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] group-hover:text-[#1D4ED8] transition-colors pointer-events-none" />
+                              <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[#94A3B8] group-hover:text-[#1D4ED8] transition-colors pointer-events-none" />
                             </div>
                           ) : null}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {structureField ? (
+                      <div className="group">
+                        <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1 group-focus-within:text-[#1D4ED8] transition-colors">
+                          {structureField.label}
+                        </label>
+                        <div className="relative">
+                          <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94A3B8] group-focus-within:text-[#1D4ED8] transition-colors pointer-events-none z-10">
+                            <Layers size={12} />
+                          </div>
+                          <select
+                            value={lead.structure || ''}
+                            disabled={!isLeadOwner}
+                            onChange={(e) =>
+                              handleSaveQualification('structure', e.target.value || null)
+                            }
+                            className="w-full pl-8 pr-7 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] font-medium focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            <option value="">{structureField.placeholder || 'Select structure'}</option>
+                            {(structureField.options || []).map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] group-hover:text-[#1D4ED8] transition-colors pointer-events-none" />
                         </div>
                       </div>
                     ) : null}

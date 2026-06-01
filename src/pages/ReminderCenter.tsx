@@ -458,7 +458,7 @@ export default function ReminderCenter() {
         )}
 
         {!loading && orderedReminders.length > 0 ? (
-          <div className="flex items-center justify-between gap-3 rounded-[18px] border border-[#E2E8F0] bg-white px-3 py-2.5">
+          <div className="mb-16 flex items-center justify-between gap-3 rounded-[18px] border border-[#E2E8F0] bg-white px-3 py-2.5 pr-14 sm:pr-16">
             <div className="text-[11px] sm:text-xs font-semibold text-[#64748B]">
               Showing <span className="text-[#0F172A] font-bold">{Math.min((page - 1) * REMINDERS_PAGE_SIZE + 1, orderedReminders.length)}</span>
               {' '}-{' '}

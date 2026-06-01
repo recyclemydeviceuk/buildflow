@@ -54,6 +54,8 @@ export default function ManualLeadModal({
     city: initialValues?.city || defaultCity,
     source: sources.find((source) => source === 'Manual') || sources[0] || 'Manual',
     campaign: '',
+    plotLocation: '',
+    structure: '',
     budget: '',
     plotOwned: false,
     plotSize: '',
@@ -81,6 +83,8 @@ export default function ManualLeadModal({
       plotSize: form.plotSize ? parseFloat(form.plotSize) : null,
       plotSizeUnit: form.plotUnit,
       buildType: form.buildType || null,
+      plotLocation: form.plotLocation || null,
+      structure: form.structure || null,
       campaign: form.campaign || null,
       notes: form.notes || null,
     })
@@ -215,6 +219,8 @@ export default function ManualLeadModal({
           ? form.budget
         : field.key === 'campaign'
           ? form.campaign
+        : field.key === 'plotLocation'
+          ? form.plotLocation
           : field.key === 'plotSize'
             ? form.plotSize
             : ''
