@@ -1,7 +1,7 @@
 import { client } from './client'
 import type { LeadFieldConfig } from './settings'
 
-export type Disposition = 'New' | 'Contacted/Open' | 'Qualified' | 'Visit Done' | 'Meeting Done' | 'Negotiation Done' | 'Booking Done' | 'Agreement Done' | 'Failed'
+export type Disposition = 'New' | 'Contacted/Open' | 'Qualified' | 'Visit Done' | 'Meeting Done' | 'Negotiation Done' | 'Booking Done' | 'Agreement Done' | 'Prospect' | 'Failed'
 
 export interface LeadStatusNote {
   _id?: string

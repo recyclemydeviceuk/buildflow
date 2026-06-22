@@ -19,6 +19,7 @@ const dispositionConfig: Record<string, { color: string; bg: string }> = {
   'Negotiation Done': { color: '#0284C7', bg: '#E0F2FE' },
   'Booking Done': { color: '#60A5FA', bg: '#EFF6FF' },
   'Agreement Done': { color: '#0369A1', bg: '#E0F2FE' },
+  Prospect: { color: '#4F46E5', bg: '#EEF2FF' },
   Failed: { color: '#64748B', bg: '#F1F5F9' },
 }
 

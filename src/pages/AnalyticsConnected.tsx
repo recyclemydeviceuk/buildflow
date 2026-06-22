@@ -44,6 +44,7 @@ const DISPOSITION_COLORS: Record<string, string> = {
   'Negotiation Done': '#F59E0B',
   'Booking Done': '#16A34A',
   'Agreement Done': '#059669',
+  Prospect: '#4F46E5',
   Failed: '#DC2626',
 }
 

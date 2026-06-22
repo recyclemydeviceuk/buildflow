@@ -31,7 +31,7 @@ const EXTRA_FIELD_META: Record<
   { label: string; help: string }
 > = {
   source: { label: 'Lead Source', help: 'Imports into the lead source field' },
-  disposition: { label: 'Stage / Status', help: 'Sets the lead stage: New, Contacted/Open, Qualified, Visit Done, Meeting Done, Negotiation Done, Booking Done, Agreement Done, or Failed' },
+  disposition: { label: 'Stage / Status', help: 'Sets the lead stage: New, Contacted/Open, Qualified, Visit Done, Meeting Done, Negotiation Done, Booking Done, Agreement Done, Prospect, or Failed' },
   notes: { label: 'Notes', help: 'Combines remarks, requirements, and other note columns into lead status notes history. Each column becomes a labeled note entry.' },
   ownerName: { label: 'Representative / Handled By', help: 'Matches the representative from the sheet by name, phone, or email and assigns the lead if found' },
   nextFollowUp: { label: 'Next Follow Up', help: 'Stores the follow-up date on the lead and syncs the imported follow-up reminder when possible' },

@@ -37,6 +37,7 @@ const dispositionColors: Record<string, { bg: string; text: string }> = {
   'Negotiation Done': { bg: '#FFFBEB', text: '#D97706' },
   'Booking Done': { bg: '#FFF7ED', text: '#EA580C' },
   'Agreement Done': { bg: '#F0FDF4', text: '#16A34A' },
+  Prospect: { bg: '#EEF2FF', text: '#4F46E5' },
   Failed: { bg: '#FEF2F2', text: '#DC2626' },
 }
 
@@ -377,6 +378,7 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
     'Negotiation Done',
     'Booking Done',
     'Agreement Done',
+    'Prospect',
     'Failed',
   ])
   const [sources, setSources] = useState<string[]>(['All', 'Direct', 'Manual', 'Meta', 'Website', 'Google ADS'])
