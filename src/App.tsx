@@ -21,6 +21,7 @@ import CallLog from './pages/CallLog'
 import Dialer from './pages/Dialer'
 import LeadImport from './pages/LeadImport'
 import EmiCalculator from './pages/EmiCalculator'
+import MediaLibrary from './pages/MediaLibrary'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { SocketProvider } from './context/SocketContext'
 import { FeatureControlsProvider } from './context/FeatureControlsContext'
@@ -128,6 +129,7 @@ function AppRoutes() {
 
           <Route path="call-log" element={<CallLog />} />
           <Route path="lead-import" element={<LeadImport />} />
+          <Route path="media" element={<MediaLibrary />} />
           <Route path="emi-calculator" element={<EmiCalculator />} />
           <Route path="settings" element={<Settings role={role} />} />
           <Route path="*" element={<Navigate to={role === 'manager' ? '/dashboard' : '/agent'} replace />} />

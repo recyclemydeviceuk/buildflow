@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Bell, BarChart2,
   FileText, Shield, Settings, Link2, BarChart3, Phone, LogOut, CalendarClock, Calculator,
-  ChevronLeft, ChevronRight, Grid3x3, UserX
+  ChevronLeft, ChevronRight, Grid3x3, UserX, FolderOpen
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { UserRole } from '../../App'
@@ -30,6 +30,7 @@ const managerNav = [
   { label: 'Analytics', icon: BarChart3, path: '/analytics' },
   { label: 'Performance', icon: BarChart2, path: '/performance' },
   { label: 'Reports', icon: FileText, path: '/reports' },
+  { label: 'Media Library', icon: FolderOpen, path: '/media' },
   { label: 'Audit Log', icon: Shield, path: '/audit' },
   { label: 'Integrations', icon: Link2, path: '/integrations' },
 ]
@@ -42,6 +43,7 @@ const repNav = [
   { label: 'Call Log', icon: Phone, path: '/call-log' },
   { label: 'Follow Ups', icon: CalendarClock, path: '/follow-ups' },
   { label: 'Call Reminders', icon: Bell, path: '/reminders' },
+  { label: 'Media Library', icon: FolderOpen, path: '/media' },
   { label: 'Performance', icon: BarChart2, path: '/performance' },
 ]
 
