@@ -261,6 +261,17 @@ export const leadsAPI = {
     format?: string
     owner?: string
     /**
+     * For dateRange === 'custom'. ISO date strings (YYYY-MM-DD). Either bound
+     * is optional, but at least one must be provided for a custom range.
+     */
+    dateFrom?: string
+    dateTo?: string
+    /**
+     * Plot ownership filter. 'looking' = leads that don't own a plot yet,
+     * 'owned' = leads that already own a plot, 'all'/undefined = no filter.
+     */
+    plotFilter?: 'all' | 'looking' | 'owned'
+    /**
      * When true, narrows the export to Failed leads whose status history
      * includes at least one Visit Done or Meeting Done. Useful for picking
      * up re-targeting work on warm leads that fell through.
