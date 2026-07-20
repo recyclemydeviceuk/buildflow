@@ -74,6 +74,7 @@ export const FAILED_REASONS = [
   'Invalid Number',
   'Looking for constructed house',
   'Looking for plot',
+  'Vendor',
   'Other',
 ] as const
 
