@@ -11,6 +11,7 @@ import { teamAPI } from '../api/team'
 import PostCallFeedbackModal from '../components/leads/PostCallFeedbackModal'
 import RecordingPlayer from '../components/calls/RecordingPlayer'
 import RepresentativePicker, { type RepresentativePickerOption } from '../components/leads/RepresentativePicker'
+import LeadFilesSection from '../components/leads/LeadFilesSection'
 import CreatedAtEditor, { formatDateTimeLocalInput } from '../components/leads/CreatedAtEditor'
 import CallReminderModal from '../components/reminders/CallReminderModal'
 import WhatsAppIcon from '../components/common/WhatsAppIcon'
@@ -2530,6 +2531,16 @@ export default function LeadDetail() {
               ) : null}
             </div>
           </div>
+
+          {/* ── Files & Documents — every lead/client gets its own file store,
+              independent of disposition. Managers & the lead owner can upload;
+              everyone with access can preview and download. ──────────────── */}
+          <LeadFilesSection
+            leadId={lead._id}
+            canManage={isLeadOwner}
+            currentUserId={user?.id}
+            currentUserRole={user?.role}
+          />
 
           {/* Post Call Feedback Modal */}
           {showFeedbackModal && (

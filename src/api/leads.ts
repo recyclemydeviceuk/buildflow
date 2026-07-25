@@ -1,5 +1,8 @@
 import { client } from './client'
 import type { LeadFieldConfig } from './settings'
+import type { MediaFile } from './media'
+
+export type { MediaFile } from './media'
 
 export type Disposition = 'New' | 'Contacted/Open' | 'Qualified' | 'Visit Done' | 'Meeting Done' | 'Negotiation Done' | 'Booking Done' | 'Agreement Done' | 'Prospect' | 'Failed'
 
@@ -300,6 +303,53 @@ export const leadsAPI = {
 
   deleteFollowUp: async (id: string, followUpId: string): Promise<{ success: boolean; message: string }> => {
     const response = await client.delete(`/leads/${id}/follow-ups/${followUpId}`)
+    return response.data
+  },
+
+  // ── Per-lead file attachments ──────────────────────────────────────────
+  // Each lead has its own file store (documents, plans, agreements, site
+  // photos, ...), separate from the shared media library. Files reuse the
+  // MediaFile shape so the media preview modal renders them as-is.
+  getLeadFiles: async (id: string): Promise<{ success: boolean; data: MediaFile[] }> => {
+    const response = await client.get(`/leads/${id}/files`)
+    return response.data
+  },
+
+  uploadLeadFile: async (
+    id: string,
+    file: File,
+    options?: { description?: string; onProgress?: (percent: number) => void }
+  ): Promise<{ success: boolean; data: MediaFile }> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (options?.description) {
+      formData.append('description', options.description)
+    }
+
+    const response = await client.post(`/leads/${id}/files`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (event) => {
+        if (options?.onProgress && event.total) {
+          options.onProgress(Math.round((event.loaded / event.total) * 100))
+        }
+      },
+    })
+    return response.data
+  },
+
+  getLeadFileDownloadUrl: async (
+    id: string,
+    fileId: string
+  ): Promise<{ success: boolean; data: { url: string } }> => {
+    const response = await client.get(`/leads/${id}/files/${fileId}/download`)
+    return response.data
+  },
+
+  deleteLeadFile: async (
+    id: string,
+    fileId: string
+  ): Promise<{ success: boolean; message: string }> => {
+    const response = await client.delete(`/leads/${id}/files/${fileId}`)
     return response.data
   },
 }
