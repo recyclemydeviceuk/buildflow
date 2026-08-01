@@ -2584,24 +2584,20 @@ export default function LeadDetail() {
           {statusNotePendingDelete && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm border border-[#E2E8F0] overflow-hidden">
-                <div className="px-5 py-4 border-b border-[#F1F5F9] bg-gradient-to-r from-red-50 to-white">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-red-500 flex items-center justify-center shadow-sm">
-                      <Trash2 size={16} className="text-white" />
+                <div className="px-5 pt-4 pb-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-[#EFF6FF] border border-[#DBEAFE] flex items-center justify-center shrink-0">
+                      <Trash2 size={15} className="text-[#1D4ED8]" />
                     </div>
-                    <div>
+                    <div className="min-w-0 pt-0.5">
                       <p className="text-sm font-bold text-[#0F172A]">Delete Note</p>
-                      <p className="text-[10px] text-[#64748B]">This action cannot be undone</p>
+                      <p className="text-[11px] text-[#64748B] mt-0.5 leading-relaxed">
+                        Are you sure you want to delete this note? This cannot be undone.
+                      </p>
                     </div>
                   </div>
-                </div>
-
-                <div className="px-5 py-4">
-                  <p className="text-sm text-[#334155]">
-                    Are you sure you want to delete this note?
-                  </p>
                   {statusNotePendingDelete.note && (
-                    <p className="mt-2 text-xs text-[#64748B] bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-2 line-clamp-3 whitespace-pre-wrap">
+                    <p className="mt-3 text-xs text-[#475569] bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-2 line-clamp-3 whitespace-pre-wrap">
                       {statusNotePendingDelete.note}
                     </p>
                   )}
@@ -2620,7 +2616,7 @@ export default function LeadDetail() {
                     type="button"
                     onClick={() => handleDeleteStatusNote(statusNotePendingDelete)}
                     disabled={deletingStatusNoteId === statusNotePendingDelete._id}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-[#1D4ED8] hover:bg-[#1E40AF] transition-colors disabled:opacity-50 flex items-center gap-1.5"
                   >
                     {deletingStatusNoteId === statusNotePendingDelete._id ? (
                       <>
