@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
   ArrowLeft, Phone, PhoneOff, PhoneCall, MapPin, Building2,
@@ -2580,9 +2581,10 @@ export default function LeadDetail() {
             />
           )}
 
-          {/* Delete Status Note Confirmation Modal */}
-          {statusNotePendingDelete && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          {/* Delete Status Note Confirmation Modal — portaled to body so the
+              overlay covers the full viewport (sticky page header + sidebar). */}
+          {statusNotePendingDelete && createPortal(
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm border border-[#E2E8F0] overflow-hidden">
                 <div className="px-5 pt-4 pb-3">
                   <div className="flex items-start gap-3">
@@ -2629,12 +2631,13 @@ export default function LeadDetail() {
                   </button>
                 </div>
               </div>
-            </div>
+            </div>,
+            document.body
           )}
 
           {/* Status Note Required Modal */}
-          {showStatusNoteModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          {showStatusNoteModal && createPortal(
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm border border-[#E2E8F0] overflow-hidden">
                 {/* Header */}
                 <div className="px-5 py-4 border-b border-[#F1F5F9] bg-gradient-to-r from-[#EFF6FF] to-white">
@@ -2687,7 +2690,8 @@ export default function LeadDetail() {
                   </button>
                 </div>
               </div>
-            </div>
+            </div>,
+            document.body
           )}
         </div>
 
