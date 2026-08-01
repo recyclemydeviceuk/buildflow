@@ -170,6 +170,7 @@ export default function LeadDetail() {
   const [isSavingStatusNote, setIsSavingStatusNote] = useState(false)
   const [editingStatusNoteId, setEditingStatusNoteId] = useState<string | null>(null)
   const [deletingStatusNoteId, setDeletingStatusNoteId] = useState<string | null>(null)
+  const [statusNotePendingDelete, setStatusNotePendingDelete] = useState<LeadStatusNote | null>(null)
   const [showReminderForm, setShowReminderForm] = useState(false)
   const [plotSize, setPlotSize] = useState('')
   const [plotUnit, setPlotUnit] = useState('Sq Yard')
@@ -677,6 +678,7 @@ export default function LeadDetail() {
       console.error('Failed to delete status note:', err)
     } finally {
       setDeletingStatusNoteId(null)
+      setStatusNotePendingDelete(null)
     }
   }
 
@@ -2289,7 +2291,7 @@ export default function LeadDetail() {
                                     <Pencil size={12} />
                                   </button>
                                   <button
-                                    onClick={() => handleDeleteStatusNote(entry)}
+                                    onClick={() => setStatusNotePendingDelete(entry)}
                                     disabled={deletingStatusNoteId === entry._id}
                                     className="p-1.5 rounded-lg text-[#64748B] hover:bg-red-50 hover:text-red-600 transition-all disabled:opacity-50"
                                     title="Delete Note"
@@ -2576,6 +2578,62 @@ export default function LeadDetail() {
               onClose={() => setShowReminderForm(false)}
               onSubmit={createLeadReminder}
             />
+          )}
+
+          {/* Delete Status Note Confirmation Modal */}
+          {statusNotePendingDelete && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm border border-[#E2E8F0] overflow-hidden">
+                <div className="px-5 py-4 border-b border-[#F1F5F9] bg-gradient-to-r from-red-50 to-white">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-red-500 flex items-center justify-center shadow-sm">
+                      <Trash2 size={16} className="text-white" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-[#0F172A]">Delete Note</p>
+                      <p className="text-[10px] text-[#64748B]">This action cannot be undone</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="px-5 py-4">
+                  <p className="text-sm text-[#334155]">
+                    Are you sure you want to delete this note?
+                  </p>
+                  {statusNotePendingDelete.note && (
+                    <p className="mt-2 text-xs text-[#64748B] bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-2 line-clamp-3 whitespace-pre-wrap">
+                      {statusNotePendingDelete.note}
+                    </p>
+                  )}
+                </div>
+
+                <div className="px-5 py-3 border-t border-[#F1F5F9] flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setStatusNotePendingDelete(null)}
+                    disabled={deletingStatusNoteId === statusNotePendingDelete._id}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-[#64748B] bg-[#F8FAFC] border border-[#E2E8F0] hover:bg-[#F1F5F9] transition-colors disabled:opacity-50"
+                  >
+                    No
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteStatusNote(statusNotePendingDelete)}
+                    disabled={deletingStatusNoteId === statusNotePendingDelete._id}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {deletingStatusNoteId === statusNotePendingDelete._id ? (
+                      <>
+                        <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Deleting...
+                      </>
+                    ) : (
+                      'Yes'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Status Note Required Modal */}
