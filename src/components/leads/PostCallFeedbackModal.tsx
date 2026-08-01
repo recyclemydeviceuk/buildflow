@@ -5,6 +5,7 @@ import type { CallOutcome } from '../../data/mockData'
 type CallDisposition =
   | 'New'
   | 'Contacted/Open'
+  | 'Interested'
   | 'Qualified'
   | 'Visit Done'
   | 'Meeting Done'
@@ -35,6 +36,7 @@ const outcomes: { value: CallOutcome; label: string; icon: typeof CheckCircle2; 
 
 const stages: { value: CallDisposition; label: string; desc: string }[] = [
   { value: 'Contacted/Open', label: 'Contacted / Open', desc: 'Conversation happened and contact was established' },
+  { value: 'Interested', label: 'Interested', desc: 'Lead has expressed interest and should be nurtured' },
   { value: 'Qualified', label: 'Qualified', desc: 'Lead shows clear buying intent or fit' },
   { value: 'Visit Done', label: 'Visit Done', desc: 'Site visit has been completed' },
   { value: 'Meeting Done', label: 'Meeting Done', desc: 'Meeting conducted — VC or at client place' },

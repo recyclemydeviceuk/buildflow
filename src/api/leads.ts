@@ -4,7 +4,7 @@ import type { MediaFile } from './media'
 
 export type { MediaFile } from './media'
 
-export type Disposition = 'New' | 'Contacted/Open' | 'Qualified' | 'Visit Done' | 'Meeting Done' | 'Negotiation Done' | 'Booking Done' | 'Agreement Done' | 'Prospect' | 'Failed'
+export type Disposition = 'New' | 'Contacted/Open' | 'Interested' | 'Qualified' | 'Visit Done' | 'Meeting Done' | 'Negotiation Done' | 'Booking Done' | 'Agreement Done' | 'Prospect' | 'Failed'
 
 export interface LeadStatusNote {
   _id?: string

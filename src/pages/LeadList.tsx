@@ -31,6 +31,7 @@ import { useFeatureControls } from '../context/FeatureControlsContext'
 const dispositionColors: Record<string, { bg: string; text: string }> = {
   New: { bg: '#EFF6FF', text: '#1D4ED8' },
   'Contacted/Open': { bg: '#F0F9FF', text: '#0284C7' },
+  Interested: { bg: '#ECFEFF', text: '#0891B2' },
   Qualified: { bg: '#ECFDF5', text: '#059669' },
   'Visit Done': { bg: '#F5F3FF', text: '#7C3AED' },
   'Meeting Done': { bg: '#FDF4FF', text: '#9333EA' },
@@ -373,6 +374,7 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
     'All',
     'New',
     'Contacted/Open',
+    'Interested',
     'Qualified',
     'Visit Done',
     'Meeting Done',

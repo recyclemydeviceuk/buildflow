@@ -13,6 +13,7 @@ import { useSocket } from '../context/SocketContext'
 const dispositionConfig: Record<string, { color: string; bg: string }> = {
   New: { color: '#2563EB', bg: '#DBEAFE' },
   'Contacted/Open': { color: '#0EA5E9', bg: '#E0F2FE' },
+  Interested: { color: '#0891B2', bg: '#ECFEFF' },
   Qualified: { color: '#1D4ED8', bg: '#DBEAFE' },
   'Visit Done': { color: '#3B82F6', bg: '#EFF6FF' },
   'Meeting Done': { color: '#38BDF8', bg: '#E0F2FE' },

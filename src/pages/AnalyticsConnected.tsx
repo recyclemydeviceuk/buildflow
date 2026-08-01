@@ -38,6 +38,7 @@ const SOURCE_COLORS: Record<string, string> = {
 const DISPOSITION_COLORS: Record<string, string> = {
   New: '#64748B',
   'Contacted/Open': '#3B82F6',
+  Interested: '#0891B2',
   Qualified: '#8B5CF6',
   'Visit Done': '#06B6D4',
   'Meeting Done': '#0EA5E9',
@@ -51,6 +52,7 @@ const DISPOSITION_COLORS: Record<string, string> = {
 const FUNNEL_ORDER = [
   'New',
   'Contacted/Open',
+  'Interested',
   'Qualified',
   'Visit Done',
   'Meeting Done',
