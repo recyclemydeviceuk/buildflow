@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Bell, BarChart2,
   FileText, Shield, Settings, Link2, BarChart3, Phone, LogOut, CalendarClock, Calculator,
-  ChevronLeft, ChevronRight, Grid3x3, UserX, FolderOpen
+  ChevronLeft, ChevronRight, Grid3x3, UserX, FolderOpen, ArrowRightLeft
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { UserRole } from '../../App'
@@ -31,6 +31,7 @@ const managerNav = [
   { label: 'Performance', icon: BarChart2, path: '/performance' },
   { label: 'Reports', icon: FileText, path: '/reports' },
   { label: 'Media Library', icon: FolderOpen, path: '/media' },
+  { label: 'Lead Transfers', icon: ArrowRightLeft, path: '/lead-transfers' },
   { label: 'Audit Log', icon: Shield, path: '/audit' },
   { label: 'Integrations', icon: Link2, path: '/integrations' },
 ]
@@ -94,6 +95,7 @@ export default function Sidebar({ role, collapsed, onToggle }: SidebarProps) {
     if (item.path === '/performance' && !featureControls.analyticsAccess) return false
     if (item.path === '/reports' && !featureControls.analyticsAccess) return false
     if (item.path === '/audit' && !featureControls.auditLog) return false
+    if (item.path === '/lead-transfers' && !featureControls.auditLog) return false
     if (item.path === '/reminders' && !featureControls.followUpReminders) return false
     if (item.path === '/follow-ups' && !featureControls.followUpReminders) return false
     return true

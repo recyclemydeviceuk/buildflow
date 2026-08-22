@@ -88,6 +88,27 @@ const MILESTONE_PRESET_FIELDS = [
   'updatedAt',
 ]
 
+const FALLBACK_EXPORT_ERROR = 'Failed to export leads. Please try again.'
+
+/**
+ * Pull a human-readable message off a failed export request. Blob responses
+ * have to be read back to text before the JSON error body is visible.
+ */
+async function readErrorMessage(err: any): Promise<string> {
+  const data = err?.response?.data
+  try {
+    if (data instanceof Blob) {
+      const text = await data.text()
+      return JSON.parse(text)?.message || FALLBACK_EXPORT_ERROR
+    }
+    if (typeof data === 'string') return JSON.parse(data)?.message || FALLBACK_EXPORT_ERROR
+    if (data?.message) return data.message
+  } catch {
+    // Non-JSON body — fall through to the generic message.
+  }
+  return FALLBACK_EXPORT_ERROR
+}
+
 export default function ExportLeadsModal({
   initialOwner = 'All',
   initialPriorMilestoneOnly = false,
@@ -161,13 +182,20 @@ export default function ExportLeadsModal({
       }
     }
 
+    // Send the selection in the canonical field order (and de-duplicated), so
+    // the CSV columns come out in a predictable order rather than the order
+    // the manager happened to tick the boxes in.
+    const orderedFields = EXPORTABLE_FIELDS.filter((f) => selectedFields.includes(f.key)).map(
+      (f) => f.key
+    )
+
     try {
       setExporting(true)
       setError('')
 
       const blob = await leadsAPI.exportLeads({
         dateRange,
-        fields: selectedFields,
+        fields: orderedFields,
         format: 'csv',
         owner: owner !== 'All' ? owner : undefined,
         dateFrom: dateRange === 'custom' && customFrom ? customFrom : undefined,
@@ -189,7 +217,11 @@ export default function ExportLeadsModal({
 
       onClose()
     } catch (err) {
-      setError('Failed to export leads. Please try again.')
+      // The request is made with responseType: 'blob', so an error body comes
+      // back as a Blob rather than parsed JSON. Read it so the manager sees
+      // the actual reason (e.g. an invalid field or date range) instead of a
+      // generic failure.
+      setError(await readErrorMessage(err))
     } finally {
       setExporting(false)
     }

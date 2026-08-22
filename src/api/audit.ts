@@ -15,6 +15,32 @@ export interface AuditLogRow {
   createdAt: string
 }
 
+export type LeadTransferType = 'assignment' | 'transfer' | 'unassignment'
+
+export interface LeadTransferHistoryRow {
+  id: string
+  leadId: string
+  leadName: string
+  leadPhone: string
+  performedBy: {
+    id: string | null
+    name: string
+    role: string
+  }
+  from: { id: string | null; name: string } | null
+  to: { id: string | null; name: string } | null
+  type: LeadTransferType
+  source: 'direct' | 'bulk' | 'queue' | 'assistant' | 'call' | 'declined' | 'legacy'
+  action: string
+  createdAt: string
+}
+
+export interface LeadTransferHistoryResponse {
+  success: boolean
+  data: LeadTransferHistoryRow[]
+  pagination: AuditLogsResponse['pagination']
+}
+
 export interface AuditLogsResponse {
   success: boolean
   data: AuditLogRow[]
@@ -57,5 +83,17 @@ export const auditAPI = {
     const response = await client.get('/audit-logs/filters')
     return response.data
   },
-}
 
+  getLeadTransferHistory: async (params?: {
+    page?: string
+    limit?: string
+    search?: string
+    type?: LeadTransferType
+    actorRole?: 'manager' | 'representative'
+    dateFrom?: string
+    dateTo?: string
+  }): Promise<LeadTransferHistoryResponse> => {
+    const response = await client.get('/audit-logs/transfers', { params })
+    return response.data
+  },
+}

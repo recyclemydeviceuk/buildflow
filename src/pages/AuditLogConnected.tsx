@@ -89,11 +89,15 @@ function buildSummary(action: string, before: unknown, after: unknown, entity: s
 
   if (action.includes('created')) return `Created new ${entity.toLowerCase()}`
   if (action.includes('deleted')) return `Deleted ${entity.toLowerCase()}`
+  if (action.includes('transferred')) {
+    const owner = changes.find((c) => c.key === 'ownerName')
+    return owner ? `Transferred from ${owner.before || 'Unassigned'} to ${owner.after || 'Unassigned'}` : 'Lead transferred'
+  }
+  if (action.includes('unassigned')) return 'Unassigned from owner'
   if (action.includes('assigned')) {
     const owner = changes.find((c) => c.key === 'ownerName')
     return owner ? `Assigned to ${owner.after || owner.before}` : 'Assignment changed'
   }
-  if (action.includes('unassigned')) return `Unassigned from owner`
 
   if (changes.length === 0) return 'Updated record'
   if (changes.length === 1) {
@@ -138,6 +142,10 @@ function getActionStyle(action: string): { dot: string; bg: string; text: string
     return { dot: '#DC2626', bg: '#FEF2F2', text: '#B91C1C', border: '#FECACA' }
   if (action.includes('created') || action.includes('added'))
     return { dot: '#16A34A', bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0' }
+  if (action.includes('unassigned'))
+    return { dot: '#EA580C', bg: '#FFF7ED', text: '#C2410C', border: '#FED7AA' }
+  if (action.includes('transferred'))
+    return { dot: '#7C3AED', bg: '#F5F3FF', text: '#6D28D9', border: '#DDD6FE' }
   if (action.includes('assigned'))
     return { dot: '#7C3AED', bg: '#F5F3FF', text: '#6D28D9', border: '#DDD6FE' }
   if (action.includes('updated') || action.includes('changed'))

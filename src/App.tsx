@@ -14,6 +14,7 @@ import TeamPerformance from './pages/TeamPerformance'
 import TeamPerformanceDetail from './pages/TeamPerformanceDetail'
 import ReportsConnected from './pages/ReportsConnected'
 import AuditLogConnected from './pages/AuditLogConnected'
+import LeadTransferHistory from './pages/LeadTransferHistory'
 import Settings from './pages/Settings'
 import Integrations from './pages/IntegrationsConnected'
 import AnalyticsConnected from './pages/AnalyticsConnected'
@@ -105,10 +106,16 @@ function AppRoutes() {
 
           {/* Audit Log — manager only + gated by auditLog feature */}
           {role === 'manager' && (
-            <Route
-              path="audit"
-              element={<FeatureGuard feature="auditLog"><AuditLogConnected /></FeatureGuard>}
-            />
+            <>
+              <Route
+                path="audit"
+                element={<FeatureGuard feature="auditLog"><AuditLogConnected /></FeatureGuard>}
+              />
+              <Route
+                path="lead-transfers"
+                element={<FeatureGuard feature="auditLog"><LeadTransferHistory /></FeatureGuard>}
+              />
+            </>
           )}
 
           {role === 'manager' && <Route path="integrations" element={<Integrations />} />}
