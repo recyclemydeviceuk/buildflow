@@ -93,7 +93,7 @@ export const auditAPI = {
     dateFrom?: string
     dateTo?: string
   }): Promise<LeadTransferHistoryResponse> => {
-    const response = await client.get('/audit-logs/transfers', { params })
+    const response = await client.get('/audit-logs/transfer-history', { params })
     return response.data
   },
 }
