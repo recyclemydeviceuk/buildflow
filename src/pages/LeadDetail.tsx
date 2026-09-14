@@ -3,9 +3,10 @@ import { createPortal } from 'react-dom'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
   ArrowLeft, Phone, PhoneOff, PhoneCall, MapPin, Building2,
-  IndianRupee, CheckCircle2, CheckCircle, Mic, ChevronDown, Edit3, User, Delete, Pencil, Trash2, X, History, MessageSquare, Clock, Calendar, ArrowUpRight, ArrowDownLeft, AlertCircle, Voicemail, Mail, Lock, Video, XCircle, Home, Layers
+  IndianRupee, CheckCircle2, CheckCircle, Mic, ChevronDown, Edit3, User, Delete, Pencil, Trash2, X, History, MessageSquare, Clock, Calendar, ArrowUpRight, ArrowDownLeft, AlertCircle, Voicemail, Mail, Lock, Video, XCircle, Home, Layers, Undo2, Hourglass
 } from 'lucide-react'
-import { leadsAPI, type Lead, type Disposition, type LeadStatusNote, type FollowUp } from '../api/leads'
+import { leadsAPI, type Lead, type Disposition, type LeadStatusNote, type FollowUp, type UndoDispositionPreview } from '../api/leads'
+import { formatExpectedMonth } from './LeadList'
 import { callsAPI, type Call } from '../api/calls'
 import { remindersAPI } from '../api/reminders'
 import { teamAPI } from '../api/team'
@@ -25,6 +26,37 @@ import { LEAD_FIELDS_STORAGE_KEY, LEAD_FIELDS_UPDATED_EVENT, normalizeLeadFieldC
 
 type CallState = 'idle' | 'dialing' | 'connected' | 'completed'
 type MicState = 'idle' | 'checking' | 'ready' | 'blocked'
+
+// Sentinel value for the "Undo last status change" entry inside the Lead
+// Status dropdown. Never a real disposition — choosing it opens the undo
+// confirmation instead of changing the draft.
+const UNDO_OPTION = '__undo__'
+
+// Current month as 'YYYY-MM' — the earliest month a Future lead can target.
+const currentMonthValue = (): string => {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+/**
+ * Client-side mirror of the server's undo target resolution, used to decide
+ * whether to show the Undo button at all (the server re-derives it and is
+ * the source of truth when the modal opens). Last history entry's `from`,
+ * else the most recent status note with a different status.
+ */
+const resolveUndoTargetClient = (lead: Lead | null): string | null => {
+  if (!lead) return null
+  const current = lead.disposition
+  const history = lead.dispositionHistory || []
+  const last = history[history.length - 1]
+  if (last && last.from && last.from !== current) return String(last.from)
+  const notes = lead.statusNotes || []
+  for (let i = notes.length - 1; i >= 0; i -= 1) {
+    const status = notes[i]?.status
+    if (status && status !== current) return String(status)
+  }
+  return null
+}
 
 const dialPadButtons = [
   { value: '1', letters: '' },
@@ -161,7 +193,7 @@ export default function LeadDetail() {
   const [dispositionNoteDraft, setDispositionNoteDraft] = useState('')
   const [dispositionNoteError, setDispositionNoteError] = useState('')
   const [isUpdatingDisposition, setIsUpdatingDisposition] = useState(false)
-  const [dispositionOptions, setDispositionOptions] = useState<string[]>(['New', 'Contacted/Open', 'Interested', 'Qualified', 'Visit Done', 'Meeting Done', 'Negotiation Done', 'Booking Done', 'Agreement Done', 'Prospect', 'Failed'])
+  const [dispositionOptions, setDispositionOptions] = useState<string[]>(['New', 'Contacted/Open', 'Interested', 'Qualified', 'Visit Done', 'Meeting Done', 'Negotiation Done', 'Booking Done', 'Agreement Done', 'Prospect', 'Future', 'Failed'])
   const [cityOptions, setCityOptions] = useState<string[]>(['Ahmedabad', 'Gandhinagar', 'Vadodara', 'Surat', 'Rajkot'])
   const [sourceOptions, setSourceOptions] = useState<string[]>(['Direct', 'Manual', 'Meta', 'Website', 'Google ADS'])
   const [buildTypeOptions, setBuildTypeOptions] = useState<string[]>(['Residential', 'Commercial', 'Villa', 'Apartment', 'Plot'])
@@ -180,6 +212,16 @@ export default function LeadDetail() {
   const [meetingType, setMeetingType] = useState<'VC' | 'Client Place' | ''>('')
   const [meetingLocation, setMeetingLocation] = useState('')
   const [failedReason, setFailedReason] = useState('')
+  // Future Lead — 'YYYY-MM' the customer expects to be ready
+  const [expectedMonth, setExpectedMonth] = useState('')
+  const [isSavingExpectedMonth, setIsSavingExpectedMonth] = useState(false)
+  // Undo last status change
+  const [showUndoModal, setShowUndoModal] = useState(false)
+  const [undoPreview, setUndoPreview] = useState<UndoDispositionPreview | null>(null)
+  const [undoPreviewLoading, setUndoPreviewLoading] = useState(false)
+  const [undoNote, setUndoNote] = useState('')
+  const [undoError, setUndoError] = useState('')
+  const [isUndoing, setIsUndoing] = useState(false)
   // Booking Done fields
   const [bookingPackage, setBookingPackage] = useState('')
   const [proposedProjectValue, setProposedProjectValue] = useState('')
@@ -343,6 +385,7 @@ export default function LeadDetail() {
         setMeetingType((res.data.meetingType as 'VC' | 'Client Place' | '') || '')
         setMeetingLocation(res.data.meetingLocation || '')
         setFailedReason(res.data.failedReason || '')
+        setExpectedMonth(res.data.expectedMonth || '')
         // Booking Done fields
         setBookingPackage(res.data.bookingPackage || '')
         setProposedProjectValue(res.data.proposedProjectValue || '')
@@ -446,16 +489,26 @@ export default function LeadDetail() {
       setDispositionNoteError('Select Meeting Type (VC or Client Place) before saving.')
       return
     }
+    if (nextDisp === 'Future' && !expectedMonth) {
+      setDispositionNoteError('Select the expected month & year before marking this as a Future lead.')
+      return
+    }
 
     try {
       setIsUpdatingDisposition(true)
       setDispositionNoteError('')
       setSelectedNoteStatus(nextDisp)
-      const res = await leadsAPI.updateDisposition(id!, nextDisp, noteToUse)
+      const res = await leadsAPI.updateDisposition(
+        id!,
+        nextDisp,
+        noteToUse,
+        nextDisp === 'Future' ? { expectedMonth } : undefined
+      )
       if (res.success) {
         setLead(res.data)
         setDisposition(res.data.disposition)
         setDispositionDraft(res.data.disposition)
+        setExpectedMonth(res.data.expectedMonth || '')
         setDispositionNoteDraft('')
         setNoteDraft('')
         const extraFields: Record<string, unknown> = {}
@@ -487,6 +540,7 @@ export default function LeadDetail() {
             setMeetingType((updRes.data.meetingType as 'VC' | 'Client Place' | '') || '')
             setMeetingLocation(updRes.data.meetingLocation || '')
             setFailedReason(updRes.data.failedReason || '')
+            setExpectedMonth(updRes.data.expectedMonth || '')
             setBookingPackage(updRes.data.bookingPackage || '')
             setProposedProjectValue(updRes.data.proposedProjectValue || '')
             setBookingAmountCollected(updRes.data.bookingAmountCollected || '')
@@ -506,6 +560,83 @@ export default function LeadDetail() {
       console.error('Failed to update disposition:', err)
     } finally {
       setIsUpdatingDisposition(false)
+    }
+  }
+
+  // Changing the month on a lead that is ALREADY Future saves immediately —
+  // there is no status change to confirm, so a Save button would be noise.
+  const handleExpectedMonthChange = async (value: string) => {
+    setExpectedMonth(value)
+    if (dispositionNoteError) setDispositionNoteError('')
+    if (!lead || disposition !== 'Future' || dispositionDraft !== 'Future' || !value) return
+    try {
+      setIsSavingExpectedMonth(true)
+      const res = await leadsAPI.updateLead(id!, { expectedMonth: value })
+      if (res.success) {
+        setLead(res.data)
+        setExpectedMonth(res.data.expectedMonth || '')
+      }
+    } catch (err: any) {
+      setDispositionNoteError(err?.response?.data?.message || 'Failed to save the expected month.')
+      console.error('Failed to save expected month:', err)
+    } finally {
+      setIsSavingExpectedMonth(false)
+    }
+  }
+
+  const openUndoModal = async () => {
+    if (!isLeadOwner || !lead) return
+    setUndoError('')
+    setUndoNote('')
+    // Seed the modal from the client-side guess so it renders instantly,
+    // then let the server confirm the exact transition.
+    const guess = resolveUndoTargetClient(lead)
+    setUndoPreview({ canUndo: Boolean(guess), from: lead.disposition, to: guess, source: null })
+    setShowUndoModal(true)
+    try {
+      setUndoPreviewLoading(true)
+      const res = await leadsAPI.previewUndoDisposition(lead._id)
+      if (res.success) setUndoPreview(res.data)
+    } catch (err) {
+      console.error('Failed to preview undo:', err)
+    } finally {
+      setUndoPreviewLoading(false)
+    }
+  }
+
+  const closeUndoModal = () => {
+    if (isUndoing) return
+    setShowUndoModal(false)
+    setUndoNote('')
+    setUndoError('')
+  }
+
+  const handleConfirmUndo = async () => {
+    if (!lead || !undoPreview?.canUndo || isUndoing) return
+    try {
+      setIsUndoing(true)
+      setUndoError('')
+      const res = await leadsAPI.undoDisposition(lead._id, undoNote.trim() || undefined)
+      if (res.success) {
+        const next = res.data
+        setLead(next)
+        setDisposition(next.disposition)
+        setDispositionDraft(next.disposition)
+        setSelectedNoteStatus(next.disposition)
+        setDispositionNoteDraft('')
+        setDispositionNoteError('')
+        setFailedReason(next.failedReason || '')
+        setExpectedMonth(next.expectedMonth || '')
+        setMeetingType((next.meetingType as 'VC' | 'Client Place' | '') || '')
+        setMeetingLocation(next.meetingLocation || '')
+        setShowUndoModal(false)
+        setUndoNote('')
+      }
+    } catch (err: any) {
+      setUndoError(err?.response?.data?.message || 'Failed to undo the status change. Please try again.')
+      console.error('Failed to undo disposition:', err)
+    } finally {
+      setIsUndoing(false)
     }
   }
 
@@ -849,6 +980,9 @@ export default function LeadDetail() {
   // Non-owners can VIEW the lead but cannot edit, transfer, or manage follow-ups.
   // Defined before the loading guard so handlers (defined above) can reference it safely.
   const isLeadOwner = user?.role === 'manager' || Boolean(lead?.owner && String(lead.owner) === String(user?.id))
+  // Where "Undo" would take this lead (null → nothing to undo, button hidden)
+  const undoTargetGuess = resolveUndoTargetClient(lead)
+  const canShowUndo = isLeadOwner && Boolean(undoTargetGuess)
 
   if (loading || !lead) {
     return (
@@ -1136,6 +1270,17 @@ export default function LeadDetail() {
             </div>
             <p className="text-xs text-[#94A3B8] mt-0.5">Lead ID: {lead._id} · Created {formatLeadCreatedAtLabel(lead.createdAt)}</p>
           </div>
+          {canShowUndo && (
+            <button
+              type="button"
+              onClick={() => void openUndoModal()}
+              title={`Undo last status change (back to ${undoTargetGuess})`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#FDE68A] bg-[#FFFBEB] text-[#B45309] text-xs font-bold hover:bg-[#FEF3C7] transition-colors shrink-0"
+            >
+              <Undo2 size={13} />
+              Undo Status
+            </button>
+          )}
           {(() => {
             const primary = lead.phone
             const alternate = lead.alternatePhone
@@ -1302,20 +1447,42 @@ export default function LeadDetail() {
 
                     </div>
                     <div>
-                      <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">Lead Status</label>
+                      <div className="flex items-center justify-between mb-1 px-1">
+                        <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider block">Lead Status</label>
+                        {canShowUndo && (
+                          <button
+                            type="button"
+                            onClick={() => void openUndoModal()}
+                            title={`Undo last status change (back to ${undoTargetGuess})`}
+                            className="inline-flex items-center gap-1 text-[9px] font-bold text-[#B45309] hover:text-[#92400E] uppercase tracking-wider transition-colors"
+                          >
+                            <Undo2 size={10} />
+                            Undo
+                          </button>
+                        )}
+                      </div>
                       <div className="space-y-2">
                         <div className="relative group">
                           <select
                             value={dispositionDraft}
                             disabled={!isLeadOwner}
                             onChange={(e) => {
+                              if (e.target.value === UNDO_OPTION) {
+                                // Keep the visible selection unchanged and hand off to the
+                                // confirmation modal — nothing changes until they confirm.
+                                void openUndoModal()
+                                return
+                              }
                               setDispositionDraft(e.target.value)
                               setSelectedNoteStatus(e.target.value)
                               setDispositionNoteError('')
                             }}
                             className="w-full appearance-none pl-3 pr-8 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs font-semibold text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                           >
-                            {dispositionOptions.map(d => <option key={d} value={d}>{d}</option>)}
+                            {dispositionOptions.map(d => <option key={d} value={d}>{d === 'Future' ? 'Future Lead' : d}</option>)}
+                            {canShowUndo && (
+                              <option value={UNDO_OPTION}>↩ Undo last status change (back to {undoTargetGuess})</option>
+                            )}
                           </select>
                           <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] group-hover:text-[#1D4ED8] transition-colors pointer-events-none" />
                         </div>
@@ -1390,6 +1557,31 @@ export default function LeadDetail() {
                               </select>
                               <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#DC2626] pointer-events-none" />
                             </div>
+                          </div>
+                        )}
+
+                        {/* Future Lead — expected month & year */}
+                        {dispositionDraft === 'Future' && (
+                          <div>
+                            <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">
+                              Expected Month & Year <span className="text-[#DC2626]">*</span>
+                            </label>
+                            <div className="relative">
+                              <Hourglass size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#0F766E] pointer-events-none" />
+                              <input
+                                type="month"
+                                value={expectedMonth}
+                                min={currentMonthValue()}
+                                disabled={!isLeadOwner || isSavingExpectedMonth}
+                                onChange={(e) => void handleExpectedMonthChange(e.target.value)}
+                                className="w-full pl-8 pr-3 py-1.5 bg-[#F0FDFA] border border-[#99F6E4] rounded-lg text-xs font-semibold text-[#0F766E] focus:outline-none focus:ring-2 focus:ring-teal-100 focus:border-[#0F766E] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                              />
+                            </div>
+                            <p className="text-[10px] text-[#64748B] mt-1 px-1">
+                              {expectedMonth
+                                ? <>Customer expects to proceed around <span className="font-semibold text-[#0F766E]">{formatExpectedMonth(expectedMonth)}</span>{disposition === 'Future' && dispositionDraft === disposition ? (isSavingExpectedMonth ? ' · saving…' : ' · saved') : ''}</>
+                                : 'Only the month and year — no specific date needed.'}
+                            </p>
                           </div>
                         )}
 
@@ -2636,6 +2828,92 @@ export default function LeadDetail() {
           )}
 
           {/* Status Note Required Modal */}
+          {showUndoModal && createPortal(
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={closeUndoModal}>
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm border border-[#E2E8F0] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                {/* Header */}
+                <div className="px-5 py-4 border-b border-[#F1F5F9] bg-gradient-to-r from-[#FFFBEB] to-white">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-[#D97706] flex items-center justify-center shadow-sm">
+                      <Undo2 size={16} className="text-white" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-[#0F172A]">Undo last status change?</p>
+                      <p className="text-[10px] text-[#64748B]">This reverts {lead.name}'s status to what it was before.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Body */}
+                <div className="px-5 py-4 space-y-3">
+                  {undoPreview?.canUndo && undoPreview.to ? (
+                    <>
+                      <div className="flex items-center justify-center gap-2 p-3 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-[#FEF2F2] text-[#DC2626] line-through decoration-2">{undoPreview.from}</span>
+                        <ArrowLeft size={14} className="text-[#94A3B8] rotate-180" />
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-[#F0FDF4] text-[#16A34A]">{undoPreview.to}</span>
+                        {undoPreviewLoading && <span className="text-[9px] text-[#94A3B8] ml-1">checking…</span>}
+                      </div>
+                      <div className="text-[11px] text-[#475569] space-y-1">
+                        <p className="font-semibold text-[#0F172A]">What will happen:</p>
+                        <ul className="list-disc pl-4 space-y-0.5">
+                          <li>Status goes back from <span className="font-semibold">{undoPreview.from}</span> to <span className="font-semibold">{undoPreview.to}</span>.</li>
+                          <li>A status note is added recording the undo, so the history stays complete.</li>
+                          <li>Details already saved (failed reason, expected month, meeting or booking info) are kept, not deleted.</li>
+                          <li>The lead moves back to the {undoPreview.to === 'Failed' ? 'Failed Leads' : undoPreview.to === 'Future' ? 'Future Leads' : 'Leads'} tab.</li>
+                        </ul>
+                      </div>
+                      <textarea
+                        value={undoNote}
+                        onChange={(e) => setUndoNote(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void handleConfirmUndo()
+                          if (e.key === 'Escape') closeUndoModal()
+                        }}
+                        rows={2}
+                        placeholder="Why are you undoing? (optional)"
+                        className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-xs text-[#0F172A] resize-none focus:outline-none focus:ring-2 focus:ring-[#D97706]/10 focus:border-[#D97706] focus:bg-white transition-all placeholder:text-[#94A3B8]"
+                      />
+                    </>
+                  ) : (
+                    <div className="flex items-start gap-2 p-3 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs text-[#475569]">
+                      <AlertCircle size={14} className="text-[#94A3B8] shrink-0 mt-0.5" />
+                      <span>This lead has no previous status to go back to.</span>
+                    </div>
+                  )}
+                  {undoError && (
+                    <div className="flex items-start gap-2 p-2.5 rounded-lg bg-[#FEF2F2] border border-[#FECACA] text-xs text-[#DC2626]">
+                      <AlertCircle size={13} className="shrink-0 mt-0.5" />
+                      <span>{undoError}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="px-5 py-3 border-t border-[#F1F5F9] flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={closeUndoModal}
+                    disabled={isUndoing}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-[#64748B] bg-[#F8FAFC] border border-[#E2E8F0] hover:bg-[#F1F5F9] transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleConfirmUndo()}
+                    disabled={!undoPreview?.canUndo || isUndoing || undoPreviewLoading}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#D97706] hover:bg-[#B45309] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Undo2 size={13} />
+                    {isUndoing ? 'Undoing…' : 'Yes, undo status'}
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+
           {showStatusNoteModal && createPortal(
             <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm border border-[#E2E8F0] overflow-hidden">

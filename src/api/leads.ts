@@ -4,7 +4,25 @@ import type { MediaFile } from './media'
 
 export type { MediaFile } from './media'
 
-export type Disposition = 'New' | 'Contacted/Open' | 'Interested' | 'Qualified' | 'Visit Done' | 'Meeting Done' | 'Negotiation Done' | 'Booking Done' | 'Agreement Done' | 'Prospect' | 'Failed'
+export type Disposition = 'New' | 'Contacted/Open' | 'Interested' | 'Qualified' | 'Visit Done' | 'Meeting Done' | 'Negotiation Done' | 'Booking Done' | 'Agreement Done' | 'Prospect' | 'Future' | 'Failed'
+
+export interface LeadDispositionChange {
+  _id?: string
+  from: Disposition | string
+  to: Disposition | string
+  kind: 'change' | 'undo'
+  changedAt: string
+  changedBy?: string | null
+  changedByName?: string | null
+  note?: string | null
+}
+
+export interface UndoDispositionPreview {
+  canUndo: boolean
+  from: Disposition | string
+  to: Disposition | string | null
+  source: 'history' | 'statusNotes' | null
+}
 
 export interface LeadStatusNote {
   _id?: string
@@ -41,6 +59,8 @@ export interface Lead {
   meetingType?: 'VC' | 'Client Place' | null
   meetingLocation?: string | null
   failedReason?: string | null
+  /** Future Lead — month the customer expects to be ready, as 'YYYY-MM' */
+  expectedMonth?: string | null
   // Booking Done fields
   bookingPackage?: string | null
   proposedProjectValue?: string | null
@@ -70,6 +90,8 @@ export interface Lead {
   tags: string[]
   notes?: string | null
   statusNotes?: LeadStatusNote[]
+  /** Every status change, oldest first. Undo reverts the last entry. */
+  dispositionHistory?: LeadDispositionChange[]
   // UTM / attribution tracking fields
   utmSource?: string | null
   utmMedium?: string | null
@@ -238,8 +260,23 @@ export const leadsAPI = {
     return response.data
   },
 
-  updateDisposition: async (id: string, disposition: string, notes?: string): Promise<LeadResponse> => {
-    const response = await client.patch(`/leads/${id}/disposition`, { disposition, notes })
+  updateDisposition: async (
+    id: string,
+    disposition: string,
+    notes?: string,
+    extra?: { expectedMonth?: string | null }
+  ): Promise<LeadResponse> => {
+    const response = await client.patch(`/leads/${id}/disposition`, { disposition, notes, ...(extra || {}) })
+    return response.data
+  },
+
+  previewUndoDisposition: async (id: string): Promise<{ success: boolean; data: UndoDispositionPreview }> => {
+    const response = await client.get(`/leads/${id}/disposition/undo`)
+    return response.data
+  },
+
+  undoDisposition: async (id: string, notes?: string): Promise<LeadResponse & { meta?: { from: string; to: string } }> => {
+    const response = await client.post(`/leads/${id}/disposition/undo`, { notes: notes || undefined })
     return response.data
   },
 

@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Bell, BarChart2,
   FileText, Shield, Settings, Link2, BarChart3, Phone, LogOut, CalendarClock, Calculator,
-  ChevronLeft, ChevronRight, Grid3x3, UserX, FolderOpen, ArrowRightLeft
+  ChevronLeft, ChevronRight, Grid3x3, UserX, FolderOpen, ArrowRightLeft, Hourglass
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { UserRole } from '../../App'
@@ -22,6 +22,7 @@ interface SidebarProps {
 const managerNav = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
   { label: 'Leads', icon: Users, path: '/leads' },
+  { label: 'Future Leads', icon: Hourglass, path: '/leads/future' },
   { label: 'Failed Leads', icon: UserX, path: '/leads/failed' },
   { label: 'Dialer', icon: Grid3x3, path: '/dialer' },
   { label: 'Call Log', icon: Phone, path: '/call-log' },
@@ -39,6 +40,7 @@ const managerNav = [
 const repNav = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/agent' },
   { label: 'My Leads', icon: Users, path: '/leads' },
+  { label: 'Future Leads', icon: Hourglass, path: '/leads/future' },
   { label: 'Failed Leads', icon: UserX, path: '/leads/failed' },
   { label: 'Dialer', icon: Grid3x3, path: '/dialer' },
   { label: 'Call Log', icon: Phone, path: '/call-log' },
@@ -82,7 +84,7 @@ export default function Sidebar({ role, collapsed, onToggle }: SidebarProps) {
   // override naturally.
   const leadDetailSource: string | null = (() => {
     if (!/^\/leads\/[^/]+$/.test(location.pathname)) return null
-    if (location.pathname === '/leads/failed') return null // not a detail URL
+    if (location.pathname === '/leads/failed' || location.pathname === '/leads/future') return null // list pages, not detail URLs
     try {
       const stored = window.sessionStorage.getItem('buildflow:lead-detail-source')
       if (stored && stored.startsWith('/leads')) return stored

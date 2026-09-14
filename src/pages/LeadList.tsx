@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Search, MapPin, ChevronRight, ArrowUpDown, X, Plus, ChevronLeft, RefreshCw, Trash2, ToggleLeft, ToggleRight, Loader2, Download, User, ChevronDown, Clock, CalendarDays, Check } from 'lucide-react'
+import { Search, MapPin, ChevronRight, ArrowUpDown, X, Plus, ChevronLeft, RefreshCw, Trash2, ToggleLeft, ToggleRight, Loader2, Download, User, ChevronDown, Clock, CalendarDays, Check, Hourglass } from 'lucide-react'
 import { leadsAPI, type Lead } from '../api/leads'
 import type { LeadFieldConfig } from '../api/settings'
 import { callsAPI } from '../api/calls'
@@ -39,6 +39,7 @@ const dispositionColors: Record<string, { bg: string; text: string }> = {
   'Booking Done': { bg: '#FFF7ED', text: '#EA580C' },
   'Agreement Done': { bg: '#F0FDF4', text: '#16A34A' },
   Prospect: { bg: '#EEF2FF', text: '#4F46E5' },
+  Future: { bg: '#F0FDFA', text: '#0F766E' },
   Failed: { bg: '#FEF2F2', text: '#DC2626' },
 }
 
@@ -54,9 +55,19 @@ const sourceColors: Record<string, string> = {
 // but persist their filters separately so picking "RNR" on the failed page
 // doesn't bleed into My Leads (and vice versa).
 const filtersStorageKey = (mode: LeadListMode) =>
-  mode === 'failed' ? 'buildflow:lead-list-filters:failed' : 'buildflow:lead-list-filters'
+  mode === 'active' ? 'buildflow:lead-list-filters' : `buildflow:lead-list-filters:${mode}`
 
-export type LeadListMode = 'active' | 'failed'
+export type LeadListMode = 'active' | 'failed' | 'future'
+
+// 'YYYY-MM' → "Mar 2027". Used by the Future Leads tab to show when the
+// customer said they would be ready.
+export const formatExpectedMonth = (value?: string | null): string => {
+  if (!value) return ''
+  const match = /^(\d{4})-(\d{2})$/.exec(value)
+  if (!match) return value
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, 1)
+  return date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
+}
 
 // Curated failed-reason list used both as the LeadDetail dropdown source AND
 // the Failed Leads filter options. RNR (Ring No Response) was added so reps
@@ -121,7 +132,7 @@ type LeadListNavigationSnapshot = {
 
 const SNAPSHOT_TTL_MS = 30 * 60 * 1000 // 30 minutes — long enough for a quick detour, short enough that re-opening the app a day later starts clean
 const snapshotKey = (mode: LeadListMode) =>
-  mode === 'failed' ? 'buildflow:lead-list-snapshot:failed' : 'buildflow:lead-list-snapshot'
+  mode === 'active' ? 'buildflow:lead-list-snapshot' : `buildflow:lead-list-snapshot:${mode}`
 
 const readLeadListSnapshot = (mode: LeadListMode): LeadListNavigationSnapshot | null => {
   if (typeof window === 'undefined') return null
@@ -213,6 +224,9 @@ interface LeadListProps {
    * 'failed'           → Failed Leads page; forces disposition=Failed and
    *                      surfaces the failedReason multi-select instead of
    *                      the disposition picker.
+   * 'future'           → Future Leads page; forces disposition=Future and
+   *                      sorts by the customer's expected month (soonest
+   *                      first). "Interested, but not now" leads live here.
    */
   mode?: LeadListMode
 }
@@ -226,6 +240,7 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
   const canAssignOwner = user?.role === 'manager' || user?.role === 'representative'
   const canEditCreatedAt = user?.role === 'manager' || user?.role === 'representative'
   const isFailedMode = mode === 'failed'
+  const isFutureMode = mode === 'future'
   const [persistedFilters] = useState(() => readPersistedLeadFilters(mode))
 
   // Consume the navigation snapshot exactly once on mount. We compute the
@@ -382,6 +397,7 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
     'Booking Done',
     'Agreement Done',
     'Prospect',
+    'Future',
     'Failed',
   ])
   const [sources, setSources] = useState<string[]>(['All', 'Direct', 'Manual', 'Meta', 'Website', 'Google ADS'])
@@ -477,11 +493,16 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
         // any persisted disposition filter from a different mode.
         params.disposition = 'Failed'
         if (filterFailedReason.length > 0) params.failedReason = filterFailedReason.join(',')
+      } else if (isFutureMode) {
+        // Future Leads view — disposition locked to Future, ordered by the
+        // month the customer expects to be ready.
+        params.disposition = 'Future'
+        params.sortBy = 'expectedMonth'
       } else {
-        // Active leads view — exclude Failed so a Failed lead never appears
-        // here (matches the user-visible promise: same lead is never in both
-        // My Leads and Failed Leads).
-        params.excludeDispositions = 'Failed'
+        // Active leads view — exclude Failed and Future so those leads only
+        // appear on their dedicated pages (matches the user-visible promise:
+        // the same lead is never in two tabs at once).
+        params.excludeDispositions = 'Failed,Future'
         if (filterDisposition.length > 0) params.disposition = filterDisposition.join(',')
       }
       if (filterSource.length > 0) params.source = filterSource.join(',')
@@ -514,7 +535,7 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
 
       return params
     },
-    [isFailedMode, search, filterDisposition, filterSource, filterCity, isManager, filterOwner, filterFollowUp, filterFailedReason, dateRange, dateMode, showMyLeadsOnly, user?.id]
+    [isFailedMode, isFutureMode, search, filterDisposition, filterSource, filterCity, isManager, filterOwner, filterFollowUp, filterFailedReason, dateRange, dateMode, showMyLeadsOnly, user?.id]
   )
 
   // Stable string identity for the current filter set. Used to validate the
@@ -1017,7 +1038,7 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
 
   const hasFilters =
     Boolean(search.trim()) ||
-    (!isFailedMode && filterDisposition.length > 0) ||
+    (!isFailedMode && !isFutureMode && filterDisposition.length > 0) ||
     (isFailedMode && filterFailedReason.length > 0) ||
     filterSource.length > 0 ||
     filterCity.length > 0 ||
@@ -1374,12 +1395,27 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
       case 'disposition':
         return (
           <td key={key} className="px-3 py-2.5">
-            <span
-              className="px-2 py-0.5 rounded-full text-[9px] font-bold"
-              style={{ background: dc.bg, color: dc.text }}
-            >
-              {lead.disposition}
-            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span
+                className="px-2 py-0.5 rounded-full text-[9px] font-bold"
+                style={{ background: dc.bg, color: dc.text }}
+              >
+                {lead.disposition}
+              </span>
+              {lead.disposition === 'Future' && (
+                <span
+                  title="Expected month"
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-semibold border ${
+                    lead.expectedMonth
+                      ? 'bg-white border-[#99F6E4] text-[#0F766E]'
+                      : 'bg-[#F8FAFC] border-[#E2E8F0] text-[#94A3B8]'
+                  }`}
+                >
+                  <Hourglass size={9} />
+                  {lead.expectedMonth ? formatExpectedMonth(lead.expectedMonth) : 'No month set'}
+                </span>
+              )}
+            </div>
           </td>
         )
       case 'followup': {
@@ -1556,12 +1592,19 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
                   </span>
                   Failed Leads
                 </>
+              ) : isFutureMode ? (
+                <>
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-[#F0FDFA] text-[#0F766E] border border-[#99F6E4]">
+                    <Hourglass size={11} strokeWidth={2.5} />
+                  </span>
+                  Future Leads
+                </>
               ) : (
                 'Leads'
               )}
             </h1>
             <p className="text-xs text-[#475569] mt-0.5">
-              {pagination.total} {isFailedMode ? 'failed leads' : 'leads'}
+              {pagination.total} {isFailedMode ? 'failed leads' : isFutureMode ? 'future leads · sorted by expected month' : 'leads'}
               {isManager && filterOwner.length === 1 && filterOwner[0] === 'unassigned' ? ' awaiting assignment' : ''}
             </p>
           </div>
@@ -1697,14 +1740,14 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
               minWidth={110}
               panelWidth={220}
             />
-          ) : (
+          ) : isFutureMode ? null : (
             <FancyMultiSelect
               values={filterDisposition}
               onChange={setFilterDisposition}
-              // Hide 'All' AND 'Failed' from the picker — Failed leads live on
-              // their own page now, so allowing the user to filter them in
-              // here would just confuse the My Leads experience.
-              options={dispositionOptions.filter((opt) => opt.value !== 'All' && opt.value !== 'Failed')}
+              // Hide 'All', 'Failed' and 'Future' from the picker — those
+              // leads live on their own pages now, so allowing the user to
+              // filter them in here would just confuse the My Leads experience.
+              options={dispositionOptions.filter((opt) => opt.value !== 'All' && opt.value !== 'Failed' && opt.value !== 'Future')}
               placeholder="Disposition"
               minWidth={70}
               panelWidth={220}

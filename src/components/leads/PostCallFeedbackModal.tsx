@@ -13,6 +13,7 @@ type CallDisposition =
   | 'Booking Done'
   | 'Agreement Done'
   | 'Prospect'
+  | 'Future'
   | 'Failed'
 
 interface PostCallFeedbackModalProps {
@@ -44,6 +45,7 @@ const stages: { value: CallDisposition; label: string; desc: string }[] = [
   { value: 'Booking Done', label: 'Booking Done', desc: 'Booking has been confirmed' },
   { value: 'Agreement Done', label: 'Agreement Done', desc: 'Agreement has been signed and deal closed' },
   { value: 'Prospect', label: 'Prospect', desc: 'Potential lead being nurtured for future conversion' },
+  { value: 'Future', label: 'Future Lead', desc: 'Interested, but not now — set the expected month on the lead page' },
   { value: 'Failed', label: 'Failed', desc: 'Opportunity closed without conversion' },
   { value: 'New', label: 'Keep as New', desc: 'Do not advance the stage yet' },
 ]

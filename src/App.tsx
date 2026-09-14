@@ -64,6 +64,7 @@ function AppRoutes() {
           {/* Failed Leads — defined before /leads/:id so 'failed' isn't
               swallowed as an :id param. */}
           <Route path="leads/failed" element={<LeadList mode="failed" />} />
+          <Route path="leads/future" element={<LeadList mode="future" />} />
           <Route path="leads/:id" element={<LeadDetail />} />
 
           {/* Follow-up routes — gated by followUpReminders */}
