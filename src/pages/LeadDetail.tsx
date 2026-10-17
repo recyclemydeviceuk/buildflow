@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
   ArrowLeft, Phone, PhoneOff, PhoneCall, MapPin, Building2,
-  IndianRupee, CheckCircle2, CheckCircle, Mic, ChevronDown, Edit3, User, Delete, Pencil, Trash2, X, History, MessageSquare, Clock, Calendar, ArrowUpRight, ArrowDownLeft, AlertCircle, Voicemail, Mail, Lock, Video, XCircle, Home, Layers, Undo2, Hourglass
+  IndianRupee, CheckCircle2, CheckCircle, Mic, ChevronDown, Edit3, User, Delete, Pencil, Trash2, X, History, MessageSquare, Clock, Calendar, ArrowUpRight, ArrowDownLeft, AlertCircle, Voicemail, Mail, Lock, XCircle, Home, Layers, Undo2, Hourglass
 } from 'lucide-react'
 import { leadsAPI, type Lead, type Disposition, type LeadStatusNote, type FollowUp, type UndoDispositionPreview } from '../api/leads'
 import { formatExpectedMonth } from './LeadList'
@@ -193,7 +193,7 @@ export default function LeadDetail() {
   const [dispositionNoteDraft, setDispositionNoteDraft] = useState('')
   const [dispositionNoteError, setDispositionNoteError] = useState('')
   const [isUpdatingDisposition, setIsUpdatingDisposition] = useState(false)
-  const [dispositionOptions, setDispositionOptions] = useState<string[]>(['New', 'Contacted/Open', 'Interested', 'Qualified', 'Visit Done', 'Meeting Done', 'Negotiation Done', 'Booking Done', 'Agreement Done', 'Prospect', 'Future', 'Failed'])
+  const [dispositionOptions, setDispositionOptions] = useState<string[]>(['New', 'Contacted/Open', 'Interested', 'Qualified', 'Virtual Meeting Done', 'In-Person Meeting Done', 'Negotiation Done', 'Booking Done', 'Agreement Done', 'Prospect', 'Future', 'Failed'])
   const [cityOptions, setCityOptions] = useState<string[]>(['Ahmedabad', 'Gandhinagar', 'Vadodara', 'Surat', 'Rajkot'])
   const [sourceOptions, setSourceOptions] = useState<string[]>(['Direct', 'Manual', 'Meta', 'Website', 'Google ADS'])
   const [buildTypeOptions, setBuildTypeOptions] = useState<string[]>(['Residential', 'Commercial', 'Villa', 'Apartment', 'Plot'])
@@ -209,7 +209,7 @@ export default function LeadDetail() {
   const [plotUnit, setPlotUnit] = useState('Sq Yard')
   const [showStatusNoteModal, setShowStatusNoteModal] = useState(false)
   const [modalNoteText, setModalNoteText] = useState('')
-  const [meetingType, setMeetingType] = useState<'VC' | 'Client Place' | ''>('')
+  const [meetingType, setMeetingType] = useState<'Office Place' | 'Client Place' | ''>('')
   const [meetingLocation, setMeetingLocation] = useState('')
   const [failedReason, setFailedReason] = useState('')
   // Future Lead — 'YYYY-MM' the customer expects to be ready
@@ -382,7 +382,7 @@ export default function LeadDetail() {
         setDispositionDraft(res.data.disposition)
         setPlotSize(res.data.plotSize?.toString() || '')
         setPlotUnit(res.data.plotSizeUnit || 'Sq Yard')
-        setMeetingType((res.data.meetingType as 'VC' | 'Client Place' | '') || '')
+        setMeetingType((res.data.meetingType as 'Office Place' | 'Client Place' | '') || '')
         setMeetingLocation(res.data.meetingLocation || '')
         setFailedReason(res.data.failedReason || '')
         setExpectedMonth(res.data.expectedMonth || '')
@@ -485,8 +485,8 @@ export default function LeadDetail() {
     const nextDisp = dispositionDraft
     if (!lead || nextDisp === disposition) return
 
-    if (nextDisp === 'Meeting Done' && !meetingType) {
-      setDispositionNoteError('Select Meeting Type (VC or Client Place) before saving.')
+    if (nextDisp === 'In-Person Meeting Done' && !meetingType) {
+      setDispositionNoteError('Select where the meeting happened (Office Place or Client Place) before saving.')
       return
     }
     if (nextDisp === 'Future' && !expectedMonth) {
@@ -512,9 +512,14 @@ export default function LeadDetail() {
         setDispositionNoteDraft('')
         setNoteDraft('')
         const extraFields: Record<string, unknown> = {}
-        if (nextDisp === 'Meeting Done') {
+        if (nextDisp === 'In-Person Meeting Done') {
           extraFields.meetingType = meetingType || null
-          extraFields.meetingLocation = meetingLocation.trim() || null
+          extraFields.meetingLocation = meetingType === 'Client Place' ? meetingLocation.trim() || null : null
+        }
+        if (nextDisp === 'Virtual Meeting Done') {
+          // Virtual meetings have no place — clear any stale in-person details.
+          extraFields.meetingType = null
+          extraFields.meetingLocation = null
         }
         if (nextDisp === 'Failed') {
           extraFields.failedReason = failedReason.trim() || null
@@ -537,7 +542,7 @@ export default function LeadDetail() {
           const updRes = await leadsAPI.updateLead(id!, extraFields)
           if (updRes.success) {
             setLead(updRes.data)
-            setMeetingType((updRes.data.meetingType as 'VC' | 'Client Place' | '') || '')
+            setMeetingType((updRes.data.meetingType as 'Office Place' | 'Client Place' | '') || '')
             setMeetingLocation(updRes.data.meetingLocation || '')
             setFailedReason(updRes.data.failedReason || '')
             setExpectedMonth(updRes.data.expectedMonth || '')
@@ -627,7 +632,7 @@ export default function LeadDetail() {
         setDispositionNoteError('')
         setFailedReason(next.failedReason || '')
         setExpectedMonth(next.expectedMonth || '')
-        setMeetingType((next.meetingType as 'VC' | 'Client Place' | '') || '')
+        setMeetingType((next.meetingType as 'Office Place' | 'Client Place' | '') || '')
         setMeetingLocation(next.meetingLocation || '')
         setShowUndoModal(false)
         setUndoNote('')
@@ -1486,9 +1491,9 @@ export default function LeadDetail() {
                           </select>
                           <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] group-hover:text-[#1D4ED8] transition-colors pointer-events-none" />
                         </div>
-                        {/* Meeting Done sub-options */}
-                        {dispositionDraft === 'Meeting Done' && (() => {
-                          const isMeetingLocked = user?.role === 'representative' && disposition === 'Meeting Done'
+                        {/* In-Person Meeting Done sub-options */}
+                        {dispositionDraft === 'In-Person Meeting Done' && (() => {
+                          const isMeetingLocked = user?.role === 'representative' && disposition === 'In-Person Meeting Done'
                           return (
                             <div className="space-y-2">
                               {isMeetingLocked && (
@@ -1499,10 +1504,10 @@ export default function LeadDetail() {
                               )}
                               <div>
                                 <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">
-                                  Meeting Type {!isMeetingLocked && <span className="text-[#DC2626]">*</span>}
+                                  Meeting Place {!isMeetingLocked && <span className="text-[#DC2626]">*</span>}
                                 </label>
                                 <div className="flex gap-2">
-                                  {(['VC', 'Client Place'] as const).map((type) => (
+                                  {(['Office Place', 'Client Place'] as const).map((type) => (
                                     <button
                                       key={type}
                                       type="button"
@@ -1692,11 +1697,11 @@ export default function LeadDetail() {
                         )}
 
                         {/* Show existing meeting/failed info when viewing */}
-                        {dispositionDraft === disposition && disposition === 'Meeting Done' && (lead.meetingType || lead.meetingLocation) && (
+                        {dispositionDraft === disposition && disposition === 'In-Person Meeting Done' && (lead.meetingType || lead.meetingLocation) && (
                           <div className="flex flex-wrap gap-2">
                             {lead.meetingType && (
                               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F5F3FF] border border-[#DDD6FE] text-[#7C3AED] text-xs font-bold">
-                                <Video size={11} className="shrink-0" /> {lead.meetingType}
+                                <Home size={11} className="shrink-0" /> {lead.meetingType}
                               </span>
                             )}
                             {lead.meetingLocation && (
@@ -2750,6 +2755,12 @@ export default function LeadDetail() {
                     notes: data.notes,
                     nextFollowUp: data.followUpAt,
                   })
+                  if (data.stage === 'In-Person Meeting Done' || data.stage === 'Virtual Meeting Done') {
+                    await leadsAPI.updateLead(lead._id, {
+                      meetingType: data.meetingType,
+                      meetingLocation: data.meetingLocation,
+                    })
+                  }
                   fetchCallLogs()
                   fetchLeadData()
                 }

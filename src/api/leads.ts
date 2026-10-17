@@ -4,7 +4,7 @@ import type { MediaFile } from './media'
 
 export type { MediaFile } from './media'
 
-export type Disposition = 'New' | 'Contacted/Open' | 'Interested' | 'Qualified' | 'Visit Done' | 'Meeting Done' | 'Negotiation Done' | 'Booking Done' | 'Agreement Done' | 'Prospect' | 'Future' | 'Failed'
+export type Disposition = 'New' | 'Contacted/Open' | 'Interested' | 'Qualified' | 'Virtual Meeting Done' | 'In-Person Meeting Done' | 'Negotiation Done' | 'Booking Done' | 'Agreement Done' | 'Prospect' | 'Future' | 'Failed'
 
 export interface LeadDispositionChange {
   _id?: string
@@ -56,7 +56,7 @@ export interface Lead {
   city: string
   source: string
   disposition: Disposition
-  meetingType?: 'VC' | 'Client Place' | null
+  meetingType?: 'Office Place' | 'Client Place' | null
   meetingLocation?: string | null
   failedReason?: string | null
   /** Future Lead — month the customer expects to be ready, as 'YYYY-MM' */
@@ -313,7 +313,7 @@ export const leadsAPI = {
     plotFilter?: 'all' | 'looking' | 'owned'
     /**
      * When true, narrows the export to Failed leads whose status history
-     * includes at least one Visit Done or Meeting Done. Useful for picking
+     * includes at least one In-Person Meeting Done or Virtual Meeting Done. Useful for picking
      * up re-targeting work on warm leads that fell through.
      */
     priorMilestoneOnly?: boolean
