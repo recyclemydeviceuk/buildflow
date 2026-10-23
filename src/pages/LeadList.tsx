@@ -33,8 +33,8 @@ const dispositionColors: Record<string, { bg: string; text: string }> = {
   'Contacted/Open': { bg: '#F0F9FF', text: '#0284C7' },
   Interested: { bg: '#ECFEFF', text: '#0891B2' },
   Qualified: { bg: '#ECFDF5', text: '#059669' },
-  'In-Person Meeting Done': { bg: '#F5F3FF', text: '#7C3AED' },
-  'Virtual Meeting Done': { bg: '#FDF4FF', text: '#9333EA' },
+  'Visit Done': { bg: '#F5F3FF', text: '#7C3AED' },
+  'Meeting Done': { bg: '#FDF4FF', text: '#9333EA' },
   'Negotiation Done': { bg: '#FFFBEB', text: '#D97706' },
   'Booking Done': { bg: '#FFF7ED', text: '#EA580C' },
   'Agreement Done': { bg: '#F0FDF4', text: '#16A34A' },
@@ -391,8 +391,8 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
     'Contacted/Open',
     'Interested',
     'Qualified',
-    'Virtual Meeting Done',
-    'In-Person Meeting Done',
+    'Visit Done',
+    'Meeting Done',
     'Negotiation Done',
     'Booking Done',
     'Agreement Done',
@@ -1793,7 +1793,19 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
               panelWidth={220}
               hideSelectAll
             />
-          ) : null /* Reps only ever see their own leads (enforced by the API). */}
+          ) : (
+            <button
+              onClick={() => setShowMyLeadsOnly((v) => !v)}
+              className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-bold border transition-colors ${
+                showMyLeadsOnly
+                  ? 'bg-[#EFF6FF] border-[#BFDBFE] text-[#1D4ED8]'
+                  : 'bg-white border-[#E2E8F0] text-[#64748B] hover:border-[#1D4ED8] hover:text-[#1D4ED8]'
+              }`}
+            >
+              <User size={12} />
+              {showMyLeadsOnly ? 'My Leads' : 'All Leads'}
+            </button>
+          )}
 
           <DateRangePicker
             value={dateRange}
@@ -1883,7 +1895,9 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
                     <p className="text-[#94A3B8] text-xs mt-1">
                       {isManager
                         ? 'New leads will appear here as unassigned until a manager routes them manually.'
-                        : 'No leads assigned to you match these filters.'}
+                        : showMyLeadsOnly
+                          ? 'No leads are assigned to you yet.'
+                          : 'No leads found. Try adjusting your filters.'}
                     </p>
                   </td>
                 </tr>

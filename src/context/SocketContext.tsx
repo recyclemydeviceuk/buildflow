@@ -36,8 +36,6 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       setConnected(true)
       newSocket.emit('join:user', user.id)
       newSocket.emit('join:team', 'all') // Default team room
-      // Assignment/transfer events are managers-only (server checks the token).
-      if (user.role === 'manager') newSocket.emit('join:team', 'managers')
     })
 
     newSocket.on('disconnect', () => {
