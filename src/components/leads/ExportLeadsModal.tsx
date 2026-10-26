@@ -6,7 +6,7 @@ interface ExportLeadsModalProps {
   initialOwner?: string
   /**
    * When true, opens the modal pre-configured for the prior-milestone
-   * preset (Failed leads that previously hit Visit Done or Meeting Done).
+   * preset (Failed leads that previously hit Virtual Meeting or Meeting Done).
    * The Failed Leads page passes this so reps don't have to discover the
    * toggle.
    */
@@ -59,8 +59,9 @@ const EXPORTABLE_FIELDS = [
   // they're only meaningful with the toggle on; the toggle force-enables
   // them automatically.
   { key: 'priorMilestones', label: 'Prior Milestones', default: false, milestoneOnly: true },
-  { key: 'visitDoneAt', label: 'Visit Done At', default: false, milestoneOnly: true },
-  { key: 'visitDoneNote', label: 'Visit Done Note', default: false, milestoneOnly: true },
+  // visitDone* keys = the 'Visit Done' status, shown as "Virtual Meeting".
+  { key: 'visitDoneAt', label: 'Virtual Meeting At', default: false, milestoneOnly: true },
+  { key: 'visitDoneNote', label: 'Virtual Meeting Note', default: false, milestoneOnly: true },
   { key: 'meetingDoneAt', label: 'Meeting Done At', default: false, milestoneOnly: true },
   { key: 'meetingDoneNote', label: 'Meeting Done Note', default: false, milestoneOnly: true },
   { key: 'failedAt', label: 'Failed At', default: false, milestoneOnly: true },
@@ -274,7 +275,7 @@ export default function ExportLeadsModal({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className={`text-sm font-bold ${priorMilestoneOnly ? 'text-[#5B21B6]' : 'text-[#0F172A]'}`}>
-                      Failed leads that previously hit Visit Done or Meeting Done
+                      Failed leads that previously hit Virtual Meeting or Meeting Done
                     </p>
                     {priorMilestoneOnly && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#7C3AED] text-white text-[10px] font-extrabold tracking-wider uppercase">
@@ -284,8 +285,8 @@ export default function ExportLeadsModal({
                   </div>
                   <p className="text-xs text-[#64748B] mt-1 leading-relaxed">
                     Re-targeting preset. Filters to leads currently marked
-                    Failed whose status history shows at least one Visit Done
-                    or Meeting Done — and adds milestone columns (with the
+                    Failed whose status history shows at least one Virtual
+                    Meeting or Meeting Done — and adds milestone columns (with the
                     notes attached at each stage and the failure reason).
                   </p>
                 </div>

@@ -4,6 +4,7 @@ import type { MediaFile } from './media'
 
 export type { MediaFile } from './media'
 
+// 'Interested' is retired but still stored on older leads; see utils/dispositions.ts.
 export type Disposition = 'New' | 'Contacted/Open' | 'Interested' | 'Qualified' | 'Visit Done' | 'Meeting Done' | 'Negotiation Done' | 'Booking Done' | 'Agreement Done' | 'Prospect' | 'Future' | 'Failed'
 
 export interface LeadDispositionChange {
@@ -56,7 +57,7 @@ export interface Lead {
   city: string
   source: string
   disposition: Disposition
-  meetingType?: 'VC' | 'Client Place' | null
+  meetingType?: 'Client Place' | 'Office Place' | 'VC' | null
   meetingLocation?: string | null
   failedReason?: string | null
   /** Future Lead — month the customer expects to be ready, as 'YYYY-MM' */
@@ -130,6 +131,8 @@ export interface LeadFiltersResponse {
     cities: string[]
     sources: string[]
     dispositions: string[]
+    /** Retired statuses some leads still hold (list filter only). */
+    legacyDispositions?: string[]
     owners: { id: string; name: string }[]
     leadFields: {
       plotSizeUnits: string[]
@@ -313,7 +316,7 @@ export const leadsAPI = {
     plotFilter?: 'all' | 'looking' | 'owned'
     /**
      * When true, narrows the export to Failed leads whose status history
-     * includes at least one Visit Done or Meeting Done. Useful for picking
+     * includes at least one Virtual Meeting (Visit Done) or Meeting Done. Useful for picking
      * up re-targeting work on warm leads that fell through.
      */
     priorMilestoneOnly?: boolean

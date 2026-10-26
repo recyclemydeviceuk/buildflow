@@ -19,6 +19,7 @@ import {
   FEATURE_CONTROLS_UPDATED_EVENT,
   normalizeFeatureControls,
 } from '../utils/featureControls'
+import { dispositionLabel } from '../utils/dispositions'
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
@@ -214,7 +215,7 @@ function CallDetailPanel({
               <p className="text-[10px] font-bold text-[#94A3B8] uppercase tracking-wider mb-1">Feedback</p>
               <div className="bg-[#F8FAFC] rounded-xl border border-[#E2E8F0] px-4">
                 {call.feedback.rating > 0 && <InfoRow label="Rating" value={`${call.feedback.rating} / 5`} />}
-                {call.feedback.disposition && <InfoRow label="Disposition" value={call.feedback.disposition} />}
+                {call.feedback.disposition && <InfoRow label="Disposition" value={dispositionLabel(call.feedback.disposition)} />}
                 {call.feedback.notes && <InfoRow label="Notes" value={call.feedback.notes} />}
               </div>
             </div>

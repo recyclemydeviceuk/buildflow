@@ -9,6 +9,7 @@ import {
 import { analyticsAPI, type ManagerDashboardResponse } from '../api/analytics'
 import { useAuth } from '../context/AuthContext'
 import { useSocket } from '../context/SocketContext'
+import { dispositionLabel } from '../utils/dispositions'
 
 const dispositionConfig: Record<string, { color: string; bg: string }> = {
   New: { color: '#1D4ED8', bg: '#DBEAFE' },
@@ -354,7 +355,7 @@ export default function Dashboard() {
     { label: 'Avg Score', value: repLeaderboard.length > 0 ? Math.round(repLeaderboard.reduce((a, r) => a + r.score, 0) / repLeaderboard.length) : 0, color: '#93C5FD', icon: Star },
   ]
 
-  const donutSegments = funnel.slice(0, 6).map((f, i) => ({ label: f.stage, value: f.count, color: FUNNEL_COLORS[i] }))
+  const donutSegments = funnel.slice(0, 6).map((f, i) => ({ label: dispositionLabel(f.stage), value: f.count, color: FUNNEL_COLORS[i] }))
 
   return (
     <div className="min-h-screen" style={{ background: '#F1F5F9' }}>
@@ -504,7 +505,7 @@ export default function Dashboard() {
                   {funnel.map((item, i) => (
                     <div key={item.stage} className="flex items-center gap-1.5">
                       <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: FUNNEL_COLORS[i] || '#94A3B8' }} />
-                      <span className="text-[9px] font-medium text-slate-500 truncate flex-1">{item.stage}</span>
+                      <span className="text-[9px] font-medium text-slate-500 truncate flex-1">{dispositionLabel(item.stage)}</span>
                       <div className="w-10 h-1 bg-slate-100 rounded-full overflow-hidden">
                         <div className="h-full rounded-full" style={{ width: `${Math.max(8, (item.count / funnelMax) * 100)}%`, background: FUNNEL_COLORS[i] }} />
                       </div>
@@ -662,7 +663,7 @@ export default function Dashboard() {
                     </div>
                     <span className="px-2 py-0.5 rounded-full text-[9px] font-bold shrink-0"
                       style={{ background: dc.bg, color: dc.color }}>
-                      {lead.disposition}
+                      {dispositionLabel(lead.disposition)}
                     </span>
                   </div>
                 )

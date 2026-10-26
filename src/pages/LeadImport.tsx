@@ -31,12 +31,12 @@ const EXTRA_FIELD_META: Record<
   { label: string; help: string }
 > = {
   source: { label: 'Lead Source', help: 'Imports into the lead source field' },
-  disposition: { label: 'Stage / Status', help: 'Sets the lead stage: New, Contacted/Open, Interested, Qualified, Visit Done, Meeting Done, Negotiation Done, Booking Done, Agreement Done, Prospect, Future, or Failed' },
+  disposition: { label: 'Stage / Status', help: 'Sets the lead stage: New, Contacted/Open, Qualified, Virtual Meeting, Meeting Done, Negotiation Done, Booking Done, Agreement Done, Prospect, Future, or Failed' },
   notes: { label: 'Notes', help: 'Combines remarks, requirements, and other note columns into lead status notes history. Each column becomes a labeled note entry.' },
   ownerName: { label: 'Representative / Handled By', help: 'Matches the representative from the sheet by name, phone, or email and assigns the lead if found' },
   nextFollowUp: { label: 'Next Follow Up', help: 'Stores the follow-up date on the lead and syncs the imported follow-up reminder when possible' },
   receivedDate: { label: 'Lead Received Date', help: 'Uses the sheet date as the imported lead received date' },
-  meetingType: { label: 'Meeting Type', help: 'For Meeting Done stage — sets the meeting type: VC or Client Place' },
+  meetingType: { label: 'Meeting Place', help: 'For Meeting Done stage — where the meeting happened: Client Place or Office Place' },
   meetingLocation: { label: 'Meeting Location', help: 'For Meeting Done (Client Place) — stores the client location or address' },
   failedReason: { label: 'Failed Reason', help: 'For Failed stage — reason for failure: Budget Issue, Not Interested, Location Issue, Timeline Issue, Competition, Not Responding, Not Enquired, Invalid Number, or Other' },
 }

@@ -190,7 +190,7 @@ const RepresentativeCard = ({
                   <span className="font-medium text-[#10B981]">{rep.leads.qualified}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-[#475569]">Visits</span>
+                  <span className="text-[#475569]">Virtual Meetings</span>
                   <span className="font-medium">{rep.leads.visitDone}</span>
                 </div>
                 <div className="flex justify-between text-xs">

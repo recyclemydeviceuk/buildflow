@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { performanceAPI, formatTurnaround, type RepresentativeDetailPerformance } from '../api/performance'
 import { useAuth } from '../context/AuthContext'
+import { dispositionLabel } from '../utils/dispositions'
 
 const MetricCard = ({
   label,
@@ -370,7 +371,7 @@ export default function TeamPerformanceDetail() {
                 leadAnalytics.dispositionBreakdown.map((item) => (
                   <div key={item.status}>
                     <div className="flex justify-between text-sm mb-1">
-                      <span className="text-[#475569]">{item.status}</span>
+                      <span className="text-[#475569]">{dispositionLabel(item.status)}</span>
                       <span className="font-medium">{item.count}</span>
                     </div>
                     <ProgressBar
@@ -544,7 +545,7 @@ export default function TeamPerformanceDetail() {
                             : 'bg-[#F1F5F9] text-[#475569]'
                         }`}
                       >
-                        {lead.disposition}
+                        {dispositionLabel(lead.disposition)}
                       </span>
                     </div>
                   </div>

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { analyticsAPI } from '../api/analytics'
 import { reportsAPI } from '../api/reports'
+import { dispositionLabel } from '../utils/dispositions'
 
 type ReportKey = 'leads' | 'calls' | 'conversion' | 'rep'
 type DateRangeKey = 'This Week' | 'This Month' | 'Last Month' | 'Last 3 Months' | 'Custom'
@@ -50,6 +51,7 @@ const SOURCE_COLORS: Record<string, string> = {
   Budigere: '#94A3B8',
 }
 
+// 'Interested' is retired; the API only returns it while some lead still has it.
 const FUNNEL_ORDER = [
   'New',
   'Contacted/Open',
@@ -219,7 +221,7 @@ function Funnel({ stages }: { stages: { stage: string; count: number }[] }) {
         const color = colorFor(DISPOSITION_COLORS, s.stage, '#3B82F6')
         return (
           <div key={s.stage} className="flex items-center gap-3">
-            <div className="w-32 shrink-0 text-xs font-semibold text-[#334155]">{s.stage}</div>
+            <div className="w-32 shrink-0 text-xs font-semibold text-[#334155]">{dispositionLabel(s.stage)}</div>
             <div className="flex-1 relative h-10 rounded-lg bg-[#F8FAFC] overflow-hidden">
               <div
                 className="h-full flex items-center px-3 transition-all duration-500"
@@ -385,7 +387,7 @@ export default function ReportsConnected() {
   // ─── derived data for Lead Pipeline ───
   const dispositionBars: BarDatum[] =
     leadPipeline?.byDisposition?.map((d: any) => ({
-      label: d._id || 'Unknown',
+      label: dispositionLabel(d._id) || 'Unknown',
       value: d.count,
       color: colorFor(DISPOSITION_COLORS, d._id, '#64748B'),
     })) || []

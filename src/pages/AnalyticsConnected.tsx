@@ -14,6 +14,7 @@ import {
   ArrowUpRight,
 } from 'lucide-react'
 import { analyticsAPI } from '../api/analytics'
+import { dispositionLabel } from '../utils/dispositions'
 
 type TabKey = 'utm' | 'sources' | 'funnel' | 'visual'
 type DateRangeKey = 'Last 7 days' | 'Last 30 days' | 'Last 90 days' | 'This Month' | 'Last Month' | 'Custom'
@@ -49,6 +50,7 @@ const DISPOSITION_COLORS: Record<string, string> = {
   Failed: '#DC2626',
 }
 
+// 'Interested' is retired; the API only returns it while some lead still has it.
 const FUNNEL_ORDER = [
   'New',
   'Contacted/Open',
@@ -198,7 +200,7 @@ function Funnel({ stages }: { stages: { stage: string; count: number }[] }) {
         const color = colorFor(DISPOSITION_COLORS, s.stage, '#3B82F6')
         return (
           <div key={s.stage} className="flex items-center gap-3">
-            <div className="w-32 shrink-0 text-xs font-semibold text-[#334155]">{s.stage}</div>
+            <div className="w-32 shrink-0 text-xs font-semibold text-[#334155]">{dispositionLabel(s.stage)}</div>
             <div className="flex-1 relative h-10 rounded-lg bg-[#F8FAFC] overflow-hidden">
               <div
                 className="h-full flex items-center px-3 transition-all duration-500"
@@ -421,7 +423,7 @@ export default function AnalyticsConnected() {
         const drop = ((prev - curr) / prev) * 100
         if (drop > maxDrop) {
           maxDrop = drop
-          maxStage = funnelData[i].stage
+          maxStage = dispositionLabel(funnelData[i].stage)
         }
       }
     }

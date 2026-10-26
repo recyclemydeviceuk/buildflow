@@ -9,6 +9,7 @@ import { followUpsAPI, type FollowUpRecord } from '../../api/followUps'
 import { leadsAPI } from '../../api/leads'
 import { PhoneIncoming, ArrowUpRight, CalendarClock, CheckCircle2, Clock3, UserCheck, Phone, MapPin } from 'lucide-react'
 import TimyButton from '../timy/TimyButton'
+import { dispositionLabel } from '../../utils/dispositions'
 
 type PendingAssignment = {
   leadId: string
@@ -377,7 +378,7 @@ export default function Layout() {
                   )}
                   {currentAssignment.disposition && (
                     <span className="px-2 py-0.5 rounded-full bg-[#EFF6FF] text-[#1D4ED8] text-[10px] font-semibold border border-[#DBEAFE]">
-                      {currentAssignment.disposition}
+                      {dispositionLabel(currentAssignment.disposition)}
                     </span>
                   )}
                 </div>

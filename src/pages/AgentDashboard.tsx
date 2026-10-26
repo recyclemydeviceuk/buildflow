@@ -9,6 +9,7 @@ import {
 import { analyticsAPI, type RepDashboardResponse } from '../api/analytics'
 import { useAuth } from '../context/AuthContext'
 import { useSocket } from '../context/SocketContext'
+import { dispositionLabel } from '../utils/dispositions'
 
 const dispositionConfig: Record<string, { color: string; bg: string }> = {
   New: { color: '#2563EB', bg: '#DBEAFE' },
@@ -352,7 +353,7 @@ export default function AgentDashboard() {
     }, {})
     return Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
-      .map(([label, value], index) => ({ label, value, color: BLUE_SCALE[index % BLUE_SCALE.length] }))
+      .map(([label, value], index) => ({ label: dispositionLabel(label), value, color: BLUE_SCALE[index % BLUE_SCALE.length] }))
   }, [dashboard?.leads])
 
   return (
@@ -586,7 +587,7 @@ export default function AgentDashboard() {
                     </div>
                     <span className="px-2 py-0.5 rounded-full text-[9px] font-bold shrink-0"
                       style={{ background: cfg.bg, color: cfg.color }}>
-                      {lead.disposition}
+                      {dispositionLabel(lead.disposition)}
                     </span>
                     <ChevronRight size={10} className="text-slate-300 group-hover:text-[#2563EB] transition-colors" />
                   </div>

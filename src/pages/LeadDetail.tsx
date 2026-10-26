@@ -22,6 +22,7 @@ import { useAuth } from '../context/AuthContext'
 import { useSocket } from '../context/SocketContext'
 import { useFeatureControls } from '../context/FeatureControlsContext'
 import { settingsAPI, type LeadFieldConfig } from '../api/settings'
+import { DISPOSITION_OPTIONS, LEGACY_DISPOSITIONS, MEETING_PLACES, dispositionLabel, isMeetingPlace } from '../utils/dispositions'
 import { LEAD_FIELDS_STORAGE_KEY, LEAD_FIELDS_UPDATED_EVENT, normalizeLeadFieldConfigs } from '../utils/leadFields'
 
 type CallState = 'idle' | 'dialing' | 'connected' | 'completed'
@@ -193,7 +194,7 @@ export default function LeadDetail() {
   const [dispositionNoteDraft, setDispositionNoteDraft] = useState('')
   const [dispositionNoteError, setDispositionNoteError] = useState('')
   const [isUpdatingDisposition, setIsUpdatingDisposition] = useState(false)
-  const [dispositionOptions, setDispositionOptions] = useState<string[]>(['New', 'Contacted/Open', 'Interested', 'Qualified', 'Visit Done', 'Meeting Done', 'Negotiation Done', 'Booking Done', 'Agreement Done', 'Prospect', 'Future', 'Failed'])
+  const [dispositionOptions, setDispositionOptions] = useState<string[]>(DISPOSITION_OPTIONS)
   const [cityOptions, setCityOptions] = useState<string[]>(['Ahmedabad', 'Gandhinagar', 'Vadodara', 'Surat', 'Rajkot'])
   const [sourceOptions, setSourceOptions] = useState<string[]>(['Direct', 'Manual', 'Meta', 'Website', 'Google ADS'])
   const [buildTypeOptions, setBuildTypeOptions] = useState<string[]>(['Residential', 'Commercial', 'Villa', 'Apartment', 'Plot'])
@@ -209,7 +210,8 @@ export default function LeadDetail() {
   const [plotUnit, setPlotUnit] = useState('Sq Yard')
   const [showStatusNoteModal, setShowStatusNoteModal] = useState(false)
   const [modalNoteText, setModalNoteText] = useState('')
-  const [meetingType, setMeetingType] = useState<'VC' | 'Client Place' | ''>('')
+  // The lead's stored meeting place; may be the legacy 'VC' on older leads.
+  const [meetingType, setMeetingType] = useState<string>('')
   const [meetingLocation, setMeetingLocation] = useState('')
   const [failedReason, setFailedReason] = useState('')
   // Future Lead — 'YYYY-MM' the customer expects to be ready
@@ -382,7 +384,7 @@ export default function LeadDetail() {
         setDispositionDraft(res.data.disposition)
         setPlotSize(res.data.plotSize?.toString() || '')
         setPlotUnit(res.data.plotSizeUnit || 'Sq Yard')
-        setMeetingType((res.data.meetingType as 'VC' | 'Client Place' | '') || '')
+        setMeetingType(res.data.meetingType || '')
         setMeetingLocation(res.data.meetingLocation || '')
         setFailedReason(res.data.failedReason || '')
         setExpectedMonth(res.data.expectedMonth || '')
@@ -485,8 +487,8 @@ export default function LeadDetail() {
     const nextDisp = dispositionDraft
     if (!lead || nextDisp === disposition) return
 
-    if (nextDisp === 'Meeting Done' && !meetingType) {
-      setDispositionNoteError('Select Meeting Type (VC or Client Place) before saving.')
+    if (nextDisp === 'Meeting Done' && !isMeetingPlace(meetingType)) {
+      setDispositionNoteError('Select the meeting place (Client Place or Office Place) before saving.')
       return
     }
     if (nextDisp === 'Future' && !expectedMonth) {
@@ -514,7 +516,8 @@ export default function LeadDetail() {
         const extraFields: Record<string, unknown> = {}
         if (nextDisp === 'Meeting Done') {
           extraFields.meetingType = meetingType || null
-          extraFields.meetingLocation = meetingLocation.trim() || null
+          // Only a client-place meeting has an address to keep.
+          extraFields.meetingLocation = meetingType === 'Client Place' ? meetingLocation.trim() || null : null
         }
         if (nextDisp === 'Failed') {
           extraFields.failedReason = failedReason.trim() || null
@@ -537,7 +540,7 @@ export default function LeadDetail() {
           const updRes = await leadsAPI.updateLead(id!, extraFields)
           if (updRes.success) {
             setLead(updRes.data)
-            setMeetingType((updRes.data.meetingType as 'VC' | 'Client Place' | '') || '')
+            setMeetingType(updRes.data.meetingType || '')
             setMeetingLocation(updRes.data.meetingLocation || '')
             setFailedReason(updRes.data.failedReason || '')
             setExpectedMonth(updRes.data.expectedMonth || '')
@@ -627,7 +630,7 @@ export default function LeadDetail() {
         setDispositionNoteError('')
         setFailedReason(next.failedReason || '')
         setExpectedMonth(next.expectedMonth || '')
-        setMeetingType((next.meetingType as 'VC' | 'Client Place' | '') || '')
+        setMeetingType(next.meetingType || '')
         setMeetingLocation(next.meetingLocation || '')
         setShowUndoModal(false)
         setUndoNote('')
@@ -1034,7 +1037,18 @@ export default function LeadDetail() {
     })
   }
 
-  const noteCounts = dispositionOptions.reduce<Record<string, number>>((acc, status) => {
+  // Retired statuses (Interested) get a tab only when this lead has notes
+  // under them or currently holds one, so those notes are never hidden.
+  const noteStatusTabs = [
+    ...dispositionOptions,
+    ...LEGACY_DISPOSITIONS.filter(
+      (status) =>
+        !dispositionOptions.includes(status) &&
+        (status === disposition || statusNotes.some((entry) => entry.status === status))
+    ),
+  ]
+
+  const noteCounts = noteStatusTabs.reduce<Record<string, number>>((acc, status) => {
     acc[status] = statusNotes.filter((entry) => entry.status === status).length
     return acc
   }, {})
@@ -1274,7 +1288,7 @@ export default function LeadDetail() {
             <button
               type="button"
               onClick={() => void openUndoModal()}
-              title={`Undo last status change (back to ${undoTargetGuess})`}
+              title={`Undo last status change (back to ${dispositionLabel(undoTargetGuess)})`}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#FDE68A] bg-[#FFFBEB] text-[#B45309] text-xs font-bold hover:bg-[#FEF3C7] transition-colors shrink-0"
             >
               <Undo2 size={13} />
@@ -1453,7 +1467,7 @@ export default function LeadDetail() {
                           <button
                             type="button"
                             onClick={() => void openUndoModal()}
-                            title={`Undo last status change (back to ${undoTargetGuess})`}
+                            title={`Undo last status change (back to ${dispositionLabel(undoTargetGuess)})`}
                             className="inline-flex items-center gap-1 text-[9px] font-bold text-[#B45309] hover:text-[#92400E] uppercase tracking-wider transition-colors"
                           >
                             <Undo2 size={10} />
@@ -1479,9 +1493,13 @@ export default function LeadDetail() {
                             }}
                             className="w-full appearance-none pl-3 pr-8 py-1.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-xs font-semibold text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/5 focus:border-[#1D4ED8] focus:bg-white transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                           >
-                            {dispositionOptions.map(d => <option key={d} value={d}>{d === 'Future' ? 'Future Lead' : d}</option>)}
+                            {/* A retired status (Interested) still shows while the lead has it, but can't be picked again. */}
+                            {disposition && !dispositionOptions.includes(disposition) && (
+                              <option value={disposition} disabled>{dispositionLabel(disposition)}</option>
+                            )}
+                            {dispositionOptions.map(d => <option key={d} value={d}>{d === 'Future' ? 'Future Lead' : dispositionLabel(d)}</option>)}
                             {canShowUndo && (
-                              <option value={UNDO_OPTION}>↩ Undo last status change (back to {undoTargetGuess})</option>
+                              <option value={UNDO_OPTION}>↩ Undo last status change (back to {dispositionLabel(undoTargetGuess)})</option>
                             )}
                           </select>
                           <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] group-hover:text-[#1D4ED8] transition-colors pointer-events-none" />
@@ -1499,10 +1517,10 @@ export default function LeadDetail() {
                               )}
                               <div>
                                 <label className="text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1 block px-1">
-                                  Meeting Type {!isMeetingLocked && <span className="text-[#DC2626]">*</span>}
+                                  Meeting Place {!isMeetingLocked && <span className="text-[#DC2626]">*</span>}
                                 </label>
                                 <div className="flex gap-2">
-                                  {(['VC', 'Client Place'] as const).map((type) => (
+                                  {MEETING_PLACES.map((type) => (
                                     <button
                                       key={type}
                                       type="button"
@@ -1696,7 +1714,12 @@ export default function LeadDetail() {
                           <div className="flex flex-wrap gap-2">
                             {lead.meetingType && (
                               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F5F3FF] border border-[#DDD6FE] text-[#7C3AED] text-xs font-bold">
-                                <Video size={11} className="shrink-0" /> {lead.meetingType}
+                                {lead.meetingType === 'VC'
+                                  ? <Video size={11} className="shrink-0" />
+                                  : lead.meetingType === 'Office Place'
+                                    ? <Building2 size={11} className="shrink-0" />
+                                    : <Home size={11} className="shrink-0" />}
+                                {' '}{lead.meetingType}
                               </span>
                             )}
                             {lead.meetingLocation && (
@@ -2302,12 +2325,12 @@ export default function LeadDetail() {
                 </div>
                 <div className="flex items-center gap-2 rounded-full border border-[#E2E8F0] bg-[#F8FAFC] px-2.5 py-1 shadow-sm">
                   <div className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse" />
-                  <span className="text-[10px] font-bold text-[#475569]">Current: {disposition}</span>
+                  <span className="text-[10px] font-bold text-[#475569]">Current: {dispositionLabel(disposition)}</span>
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-1">
-                {dispositionOptions.map((status) => {
+                {noteStatusTabs.map((status) => {
                   const isSelected = activeNoteStatus === status
                   const isCurrent = disposition === status
                   const noteCount = noteCounts[status] || 0
@@ -2323,7 +2346,7 @@ export default function LeadDetail() {
                           : 'border-[#E2E8F0] bg-white text-[#475569] hover:border-[#1D4ED8] hover:bg-[#F8FBFF] hover:text-[#1D4ED8]'
                       }`}
                     >
-                      <span>{status}</span>
+                      <span>{dispositionLabel(status)}</span>
                       {noteCount > 0 && (
                         <span
                           className={`flex items-center justify-center min-w-[16px] h-[16px] rounded px-0.5 text-[9px] font-extrabold ${
@@ -2353,7 +2376,7 @@ export default function LeadDetail() {
                         {editingStatusNoteId ? 'Edit Note' : 'Add Note'}
                       </p>
                     </div>
-                    <h3 className="text-xl font-bold text-[#0F172A]">{activeNoteStatus}</h3>
+                    <h3 className="text-xl font-bold text-[#0F172A]">{dispositionLabel(activeNoteStatus)}</h3>
                   </div>
                   {editingStatusNoteId ? (
                     <button 
@@ -2378,7 +2401,7 @@ export default function LeadDetail() {
                     value={noteDraft}
                     readOnly={!isLeadOwner}
                     onChange={(e) => isLeadOwner && setNoteDraft(e.target.value)}
-                    placeholder={isLeadOwner ? `What happened in ${activeNoteStatus} stage?` : 'Only the lead owner can add notes.'}
+                    placeholder={isLeadOwner ? `What happened in ${dispositionLabel(activeNoteStatus)} stage?` : 'Only the lead owner can add notes.'}
                     rows={6}
                     className={`w-full px-4 py-4 border rounded-2xl text-sm text-[#0F172A] placeholder-[#94A3B8] resize-none focus:outline-none focus:ring-4 transition-all shadow-inner ${
                       !isLeadOwner
@@ -2428,7 +2451,7 @@ export default function LeadDetail() {
                           <span>{editingStatusNoteId ? 'Updating...' : 'Saving...'}</span>
                         </>
                       ) : (
-                        <span>{editingStatusNoteId ? 'Update Note' : `Save to ${activeNoteStatus}`}</span>
+                        <span>{editingStatusNoteId ? 'Update Note' : `Save to ${dispositionLabel(activeNoteStatus)}`}</span>
                       )}
                     </button>
                   </div>
@@ -2444,7 +2467,7 @@ export default function LeadDetail() {
                     </div>
                     <div>
                       <p className="text-[9px] font-extrabold uppercase tracking-wider text-[#64748B]">History</p>
-                      <h3 className="text-xs font-bold text-[#0F172A]">{activeNoteStatus} Activity</h3>
+                      <h3 className="text-xs font-bold text-[#0F172A]">{dispositionLabel(activeNoteStatus)} Activity</h3>
                     </div>
                   </div>
                   <div className="px-2.5 py-1 rounded-lg bg-white border border-[#E2E8F0] shadow-sm">
@@ -2460,7 +2483,7 @@ export default function LeadDetail() {
                           <div className="flex items-center justify-between gap-2 mb-2">
                             <div className="flex items-center gap-2">
                               <span className="px-2 py-0.5 rounded-md bg-[#EFF6FF] text-[#1D4ED8] text-[10px] font-extrabold uppercase border border-[#DBEAFE]">
-                                {entry.status}
+                                {dispositionLabel(entry.status)}
                               </span>
                             </div>
                             <span className="text-[10px] font-medium text-[#94A3B8]">{new Date(entry.createdAt).toLocaleString()}</span>
@@ -2749,6 +2772,8 @@ export default function LeadDetail() {
                     disposition: data.stage,
                     notes: data.notes,
                     nextFollowUp: data.followUpAt,
+                    meetingType: data.meetingType,
+                    meetingLocation: data.meetingLocation,
                   })
                   fetchCallLogs()
                   fetchLeadData()
@@ -2849,15 +2874,15 @@ export default function LeadDetail() {
                   {undoPreview?.canUndo && undoPreview.to ? (
                     <>
                       <div className="flex items-center justify-center gap-2 p-3 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-[#FEF2F2] text-[#DC2626] line-through decoration-2">{undoPreview.from}</span>
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-[#FEF2F2] text-[#DC2626] line-through decoration-2">{dispositionLabel(undoPreview.from)}</span>
                         <ArrowLeft size={14} className="text-[#94A3B8] rotate-180" />
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-[#F0FDF4] text-[#16A34A]">{undoPreview.to}</span>
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-[#F0FDF4] text-[#16A34A]">{dispositionLabel(undoPreview.to)}</span>
                         {undoPreviewLoading && <span className="text-[9px] text-[#94A3B8] ml-1">checking…</span>}
                       </div>
                       <div className="text-[11px] text-[#475569] space-y-1">
                         <p className="font-semibold text-[#0F172A]">What will happen:</p>
                         <ul className="list-disc pl-4 space-y-0.5">
-                          <li>Status goes back from <span className="font-semibold">{undoPreview.from}</span> to <span className="font-semibold">{undoPreview.to}</span>.</li>
+                          <li>Status goes back from <span className="font-semibold">{dispositionLabel(undoPreview.from)}</span> to <span className="font-semibold">{dispositionLabel(undoPreview.to)}</span>.</li>
                           <li>A status note is added recording the undo, so the history stays complete.</li>
                           <li>Details already saved (failed reason, expected month, meeting or booking info) are kept, not deleted.</li>
                           <li>The lead moves back to the {undoPreview.to === 'Failed' ? 'Failed Leads' : undoPreview.to === 'Future' ? 'Future Leads' : 'Leads'} tab.</li>
@@ -2926,7 +2951,7 @@ export default function LeadDetail() {
                     <div>
                       <p className="text-sm font-bold text-[#0F172A]">Add a Status Note</p>
                       <p className="text-[10px] text-[#64748B]">
-                        Updating to <span className="font-semibold text-[#1D4ED8]">{dispositionDraft}</span> requires a note
+                        Updating to <span className="font-semibold text-[#1D4ED8]">{dispositionLabel(dispositionDraft)}</span> requires a note
                       </p>
                     </div>
                   </div>
@@ -2943,7 +2968,7 @@ export default function LeadDetail() {
                       if (e.key === 'Escape') { setShowStatusNoteModal(false); setModalNoteText('') }
                     }}
                     rows={4}
-                    placeholder={`Describe what happened or the reason for moving to "${dispositionDraft}"...`}
+                    placeholder={`Describe what happened or the reason for moving to "${dispositionLabel(dispositionDraft)}"...`}
                     className="w-full px-3 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-sm text-[#0F172A] resize-none focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/10 focus:border-[#1D4ED8] focus:bg-white transition-all placeholder:text-[#94A3B8]"
                   />
                   <p className="text-[10px] text-[#94A3B8]">Tip: Press Ctrl+Enter to save quickly</p>

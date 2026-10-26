@@ -31,6 +31,7 @@ import {
   FEATURE_CONTROLS_UPDATED_EVENT,
   normalizeFeatureControls,
 } from '../utils/featureControls'
+import { dispositionLabel } from '../utils/dispositions'
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
   initiated: { label: 'Dialing Rep', color: '#D97706', bg: '#FFFBEB' },
@@ -671,7 +672,7 @@ export default function Dialer() {
                             )}
                           </div>
                           <p className="text-xs text-[#94A3B8] mt-1">
-                            {selectedLead.city} • {selectedLead.source} • {selectedLead.disposition}
+                            {selectedLead.city} • {selectedLead.source} • {dispositionLabel(selectedLead.disposition)}
                           </p>
                         </div>
                         <button

@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { X, CheckCircle2, PhoneOff, Voicemail, Clock, AlertCircle, ChevronRight, Calendar } from 'lucide-react'
 import type { CallOutcome } from '../../data/mockData'
+import { dispositionLabel, MEETING_PLACES, type MeetingPlace } from '../../utils/dispositions'
 
 type CallDisposition =
   | 'New'
   | 'Contacted/Open'
-  | 'Interested'
   | 'Qualified'
   | 'Visit Done'
   | 'Meeting Done'
@@ -23,6 +23,8 @@ interface PostCallFeedbackModalProps {
     stage: CallDisposition
     notes: string
     followUpAt: string | null
+    meetingType: MeetingPlace | null
+    meetingLocation: string | null
   }) => void
   onClose: () => void
 }
@@ -37,10 +39,9 @@ const outcomes: { value: CallOutcome; label: string; icon: typeof CheckCircle2; 
 
 const stages: { value: CallDisposition; label: string; desc: string }[] = [
   { value: 'Contacted/Open', label: 'Contacted / Open', desc: 'Conversation happened and contact was established' },
-  { value: 'Interested', label: 'Interested', desc: 'Lead has expressed interest and should be nurtured' },
   { value: 'Qualified', label: 'Qualified', desc: 'Lead shows clear buying intent or fit' },
-  { value: 'Visit Done', label: 'Visit Done', desc: 'Site visit has been completed' },
-  { value: 'Meeting Done', label: 'Meeting Done', desc: 'Meeting conducted — VC or at client place' },
+  { value: 'Visit Done', label: dispositionLabel('Visit Done'), desc: 'Virtual meeting (video call) has been conducted' },
+  { value: 'Meeting Done', label: 'Meeting Done', desc: 'Met in person — at client place or office place' },
   { value: 'Negotiation Done', label: 'Negotiation Done', desc: 'Negotiation on terms or pricing is complete' },
   { value: 'Booking Done', label: 'Booking Done', desc: 'Booking has been confirmed' },
   { value: 'Agreement Done', label: 'Agreement Done', desc: 'Agreement has been signed and deal closed' },
@@ -56,14 +57,24 @@ export default function PostCallFeedbackModal({ leadName, onSubmit, onClose }: P
   const [notes, setNotes] = useState('')
   const [followUpAt, setFollowUpAt] = useState('')
   const [needsFollowUp, setNeedsFollowUp] = useState(false)
+  const [meetingType, setMeetingType] = useState<MeetingPlace | ''>('')
+  const [meetingLocation, setMeetingLocation] = useState('')
+  const [error, setError] = useState('')
+  const isMeetingDone = stage === 'Meeting Done'
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (isMeetingDone && !meetingType) {
+      setError('Select where the meeting happened (Client Place or Office Place).')
+      return
+    }
     onSubmit({
       outcome,
       stage,
       notes,
       followUpAt: needsFollowUp && followUpAt ? followUpAt : null,
+      meetingType: isMeetingDone && meetingType ? meetingType : null,
+      meetingLocation: isMeetingDone && meetingType === 'Client Place' ? meetingLocation.trim() || null : null,
     })
   }
 
@@ -118,7 +129,7 @@ export default function PostCallFeedbackModal({ leadName, onSubmit, onClose }: P
                 <button
                   key={s.value}
                   type="button"
-                  onClick={() => setStage(s.value)}
+                  onClick={() => { setStage(s.value); setError('') }}
                   className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${
                     stage === s.value
                       ? 'border-[#1D4ED8] bg-[#EFF6FF]'
@@ -143,6 +154,39 @@ export default function PostCallFeedbackModal({ leadName, onSubmit, onClose }: P
               ))}
             </div>
           </div>
+
+          {/* Meeting Done — where the meeting took place */}
+          {isMeetingDone && (
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-[#0F172A] block">
+                Meeting Place <span className="text-[#DC2626]">*</span>
+              </label>
+              <div className="flex gap-2">
+                {MEETING_PLACES.map((place) => (
+                  <button
+                    key={place}
+                    type="button"
+                    onClick={() => { setMeetingType(place); setError('') }}
+                    className={`flex-1 py-2 rounded-xl text-sm font-semibold border-2 transition-all ${
+                      meetingType === place
+                        ? 'border-[#1D4ED8] bg-[#EFF6FF] text-[#1D4ED8]'
+                        : 'border-[#E2E8F0] bg-white text-[#475569] hover:border-[#BFDBFE]'
+                    }`}
+                  >
+                    {place}
+                  </button>
+                ))}
+              </div>
+              {meetingType === 'Client Place' && (
+                <input
+                  value={meetingLocation}
+                  onChange={(e) => setMeetingLocation(e.target.value)}
+                  placeholder="Client address or Google Maps link (optional)"
+                  className="w-full px-4 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/30 focus:border-[#1D4ED8]"
+                />
+              )}
+            </div>
+          )}
 
           {/* Notes */}
           <div>
@@ -179,6 +223,8 @@ export default function PostCallFeedbackModal({ leadName, onSubmit, onClose }: P
               </div>
             )}
           </div>
+
+          {error && <p className="text-xs font-semibold text-[#DC2626]">{error}</p>}
 
           {/* Submit */}
           <div className="flex gap-3 pt-2">

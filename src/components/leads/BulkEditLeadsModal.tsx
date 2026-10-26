@@ -3,6 +3,7 @@ import { X, Save, Users } from 'lucide-react'
 import type { BulkUpdateLeadsPayload } from '../../api/leads'
 import CreatedAtEditor from './CreatedAtEditor'
 import type { RepresentativePickerOption } from './RepresentativePicker'
+import { dispositionLabel } from '../../utils/dispositions'
 
 interface BulkEditLeadsModalProps {
   allowUnassigned: boolean
@@ -136,7 +137,7 @@ export default function BulkEditLeadsModal({
                 <option value="">No change</option>
                 {dispositions.map((dispositionOption) => (
                   <option key={dispositionOption} value={dispositionOption}>
-                    {dispositionOption}
+                    {dispositionLabel(dispositionOption)}
                   </option>
                 ))}
               </select>
@@ -179,7 +180,7 @@ export default function BulkEditLeadsModal({
                 value={statusNote}
                 onChange={(event) => setStatusNote(event.target.value)}
                 rows={3}
-                placeholder={`Add a note for changing selected leads to ${disposition}...`}
+                placeholder={`Add a note for changing selected leads to ${dispositionLabel(disposition)}...`}
                 className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] placeholder-[#94A3B8] resize-none focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/20 focus:border-[#1D4ED8]"
               />
             </div>

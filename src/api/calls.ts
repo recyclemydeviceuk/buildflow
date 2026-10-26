@@ -139,6 +139,9 @@ export const callsAPI = {
       disposition?: string
       nextFollowUp?: string | null
       followUpAt?: string | null
+      /** Meeting Done only — where the meeting took place. */
+      meetingType?: string | null
+      meetingLocation?: string | null
     }
   ): Promise<{ success: boolean; data: Call }> => {
     const response = await client.patch(`/calls/${id}/feedback`, feedback)

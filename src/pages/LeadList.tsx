@@ -27,6 +27,7 @@ import { useSocket } from '../context/SocketContext'
 import { LEAD_FIELDS_STORAGE_KEY, LEAD_FIELDS_UPDATED_EVENT } from '../utils/leadFields'
 import { settingsAPI } from '../api/settings'
 import { useFeatureControls } from '../context/FeatureControlsContext'
+import { DISPOSITION_OPTIONS, LEGACY_DISPOSITIONS, dispositionLabel } from '../utils/dispositions'
 
 const dispositionColors: Record<string, { bg: string; text: string }> = {
   New: { bg: '#EFF6FF', text: '#1D4ED8' },
@@ -385,21 +386,9 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
   // Total span for empty/loading rows: 1 (checkbox col) + visible columns + 1 (trailing chevron)
   const tableColSpan = 1 + effectiveColumnKeys.length + 1
 
-  const [dispositions, setDispositions] = useState<string[]>([
-    'All',
-    'New',
-    'Contacted/Open',
-    'Interested',
-    'Qualified',
-    'Visit Done',
-    'Meeting Done',
-    'Negotiation Done',
-    'Booking Done',
-    'Agreement Done',
-    'Prospect',
-    'Future',
-    'Failed',
-  ])
+  // Filter choices: every current status, plus any retired status (Interested)
+  // that some leads still hold so they can be found and moved on.
+  const [dispositions, setDispositions] = useState<string[]>(['All', ...DISPOSITION_OPTIONS])
   const [sources, setSources] = useState<string[]>(['All', 'Direct', 'Manual', 'Meta', 'Website', 'Google ADS'])
   const [cities, setCities] = useState<string[]>(['All'])
   const [leadFields, setLeadFields] = useState<LeadFieldConfig[]>([])
@@ -901,7 +890,7 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
     try {
       const res = await leadsAPI.getLeadFilters()
       if (res.success) {
-        setDispositions(['All', ...res.data.dispositions])
+        setDispositions(['All', ...res.data.dispositions, ...(res.data.legacyDispositions || [])])
         setSources(['All', ...res.data.sources])
         setCities(['All', ...res.data.cities])
         setLeadFields(res.data.leadFields?.fields || [])
@@ -1152,7 +1141,12 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
 
   const dispositionOptions: FancyDropdownOption[] = dispositions.map((disposition) => ({
     value: disposition,
-    label: disposition === 'All' ? 'All Dispositions' : disposition,
+    label:
+      disposition === 'All'
+        ? 'All Dispositions'
+        : LEGACY_DISPOSITIONS.includes(disposition)
+          ? `${disposition} (old)`
+          : dispositionLabel(disposition),
     dotColor: disposition !== 'All' ? dispositionColors[disposition]?.text : undefined,
   }))
 
@@ -1400,7 +1394,7 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
                 className="px-2 py-0.5 rounded-full text-[9px] font-bold"
                 style={{ background: dc.bg, color: dc.text }}
               >
-                {lead.disposition}
+                {dispositionLabel(lead.disposition)}
               </span>
               {lead.disposition === 'Future' && (
                 <span
@@ -1985,7 +1979,7 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
         <BulkEditLeadsModal
           allowUnassigned={isManager}
           canAssignOwner={canAssignOwner}
-          dispositions={dispositions.filter((disposition) => disposition !== 'All')}
+          dispositions={dispositions.filter((disposition) => disposition !== 'All' && !LEGACY_DISPOSITIONS.includes(disposition))}
           onClose={() => setShowBulkEditModal(false)}
           onSubmit={handleBulkUpdate}
           representatives={representatives}
