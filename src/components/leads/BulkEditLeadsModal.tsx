@@ -38,6 +38,9 @@ export default function BulkEditLeadsModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  const selectedRepReceivingOff =
+    representatives.find((representative) => representative.id === owner && representative.canReceiveLeads === false) || null
+
   const hasChanges = useMemo(
     () => Boolean(source || disposition || createdAt || (canAssignOwner && owner !== '')),
     [canAssignOwner, createdAt, disposition, owner, source]
@@ -157,9 +160,17 @@ export default function BulkEditLeadsModal({
                 {representatives.map((representative) => (
                   <option key={representative.id} value={representative.id}>
                     {representative.name}
+                    {representative.canReceiveLeads === false ? ' (lead receiving off)' : ''}
                   </option>
                 ))}
               </select>
+              {selectedRepReceivingOff ? (
+                <p className="mt-1.5 text-xs text-[#92400E] bg-[#FFFBEB] border border-[#FDE68A] rounded-lg px-3 py-2">
+                  {allowUnassigned
+                    ? `${selectedRepReceivingOff.name} has lead receiving switched off, so auto-routing skips them. These leads will still be assigned to them.`
+                    : `${selectedRepReceivingOff.name} is not taking new leads right now. Ask a manager to assign these leads.`}
+                </p>
+              ) : null}
             </div>
           ) : null}
 

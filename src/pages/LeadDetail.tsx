@@ -238,6 +238,7 @@ export default function LeadDetail() {
   const [totalCollection, setTotalCollection] = useState('')
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
   const [representatives, setRepresentatives] = useState<RepresentativePickerOption[]>([])
+  const [assignError, setAssignError] = useState('')
   const [selectedRepresentativeId, setSelectedRepresentativeId] = useState<string>('')
   const [micState, setMicState] = useState<MicState>('idle')
   const [editableName, setEditableName] = useState('')
@@ -475,6 +476,7 @@ export default function LeadDetail() {
               phone: member.phone,
               callAvailabilityStatus: member.callAvailabilityStatus,
               activeCallSid: member.activeCallSid,
+              canReceiveLeads: member.canReceiveLeads,
             }))
         )
       }
@@ -694,6 +696,7 @@ export default function LeadDetail() {
 
   const handleAssignLead = async (assignedTo: string | null) => {
     try {
+      setAssignError('')
       const res = await leadsAPI.assignLead(id!, assignedTo)
       if (res.success) {
         if (user?.role === 'representative' && assignedTo && String(assignedTo) !== String(user.id)) {
@@ -702,8 +705,9 @@ export default function LeadDetail() {
         }
         setLead(res.data)
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to assign lead:', err)
+      setAssignError(err?.response?.data?.message || 'Could not transfer this lead. Please try again.')
     }
   }
 
@@ -2026,6 +2030,9 @@ export default function LeadDetail() {
                           </div>
                           <span className="text-[11px] font-semibold text-[#0F172A]">{lead.ownerName || 'Unassigned'}</span>
                         </div>
+                      )}
+                      {assignError && (
+                        <p className="mt-1 px-1 text-[10px] font-semibold text-[#DC2626]">{assignError}</p>
                       )}
                     </div>
                   </div>

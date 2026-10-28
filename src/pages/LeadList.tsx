@@ -299,6 +299,9 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
   )
   const [loading, setLoading] = useState(() => !navSnapshot)
   const [ownershipToast, setOwnershipToast] = useState(false)
+  // Server's reason when a single-lead transfer is refused (e.g. the rep's
+  // account is inactive) — previously this only reached the console.
+  const [assignErrorToast, setAssignErrorToast] = useState('')
 
   const [search, setSearch] = useState(persistedFilters.search)
   // Each filter is an array — empty array == "All". A single value is treated
@@ -918,6 +921,7 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
               phone: member.phone,
               callAvailabilityStatus: member.callAvailabilityStatus,
               activeCallSid: member.activeCallSid,
+              canReceiveLeads: member.canReceiveLeads,
             }))
         )
       }
@@ -951,8 +955,10 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
       } else {
         await initInfiniteScroll()
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to assign lead:', error)
+      setAssignErrorToast(error?.response?.data?.message || 'Could not transfer this lead. Please try again.')
+      setTimeout(() => setAssignErrorToast(''), 5000)
     } finally {
       setAssigningLeadId(null)
     }
@@ -1572,6 +1578,15 @@ export default function LeadList({ mode = 'active' }: LeadListProps = {}) {
           <div>
             <p className="text-sm font-bold">You can't transfer this lead</p>
             <p className="text-xs text-[#94A3B8]">Only the lead owner or a manager can transfer leads.</p>
+          </div>
+        </div>
+      )}
+      {assignErrorToast && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[90] flex items-center gap-3 px-5 py-3 rounded-2xl bg-[#1E293B] text-white shadow-2xl animate-fade-in max-w-[90vw]">
+          <div className="w-6 h-6 rounded-full bg-[#DC2626] flex items-center justify-center shrink-0 text-xs font-bold">!</div>
+          <div>
+            <p className="text-sm font-bold">Lead not transferred</p>
+            <p className="text-xs text-[#CBD5E1]">{assignErrorToast}</p>
           </div>
         </div>
       )}

@@ -8,6 +8,8 @@ export type RepresentativePickerOption = {
   phone?: string
   callAvailabilityStatus?: string | null
   activeCallSid?: string | null
+  /** false = lead receiving switched off (Settings → Lead Assignment). */
+  canReceiveLeads?: boolean
 }
 
 type RepresentativePickerProps = {
@@ -273,6 +275,14 @@ export default function RepresentativePicker({
                                 <span className="w-0.5 h-0.5 rounded-full" style={{ background: status.dot }} />
                                 {status.label}
                               </span>
+                              {option.canReceiveLeads === false ? (
+                                <span
+                                  title="Lead receiving is off in Settings → Lead Assignment: auto-routing skips this rep, but a manager can still assign leads."
+                                  className="inline-flex items-center px-1 py-0.5 rounded-full text-[7px] font-bold shrink-0 bg-[#FEF2F2] text-[#B91C1C]"
+                                >
+                                  Receiving off
+                                </span>
+                              ) : null}
                             </div>
                             <p className="text-[8px] text-[#94A3B8] truncate">{option.phone || 'No phone configured'}</p>
                           </div>
